@@ -18,16 +18,19 @@ import {
   updateCategory,
   deleteCategory,
   uploadImage,
+  getOrdersByBusinessId,
+  updateOrderStatus,
   Category, 
   Business, 
-  Product 
+  Product,
+  Order
 } from '@/core/services/firebaseService';
 
 export default function MaintainerDashboard() {
   const router = useRouter();
   const { user, logoutUser, userProfile } = useAuth();
   
-  const [activeTab, setActiveTab] = useState<'perfil' | 'catalogo' | 'categorias'>('perfil');
+  const [activeTab, setActiveTab] = useState<'perfil' | 'catalogo' | 'pedidos' | 'categorias'>('perfil');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -43,6 +46,10 @@ export default function MaintainerDashboard() {
   const [imageUrl, setImageUrl] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [isOpen, setIsOpen] = useState(true);
+
+  // Pedidos del negocio
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
 
   // Categorías de Firestore
   const [categories, setCategories] = useState<Category[]>([]);
@@ -60,6 +67,19 @@ export default function MaintainerDashboard() {
   const [newProductPrice, setNewProductPrice] = useState('');
   const [newProductDesc, setNewProductDesc] = useState('');
   const [newProductImg, setNewProductImg] = useState('');
+
+  // Cargar pedidos
+  const loadOrders = async (bizId: string) => {
+    setLoadingOrders(true);
+    try {
+      const data = await getOrdersByBusinessId(bizId);
+      setOrders(data);
+    } catch (error) {
+      console.error('Error al cargar pedidos:', error);
+    } finally {
+      setLoadingOrders(false);
+    }
+  };
 
   // Cargar categorías y datos del negocio
   const loadData = async () => {
@@ -85,6 +105,9 @@ export default function MaintainerDashboard() {
         } else if (b.category) {
           setSelectedCategory({ name: b.category, imageUrl: '' });
         }
+
+        // Cargar pedidos de la tienda
+        await loadOrders(b.id!);
       }
     } catch (error) {
       console.error('Error al cargar datos del panel:', error);
@@ -118,7 +141,6 @@ export default function MaintainerDashboard() {
       const uri = result.assets[0].uri;
       setUploadingImage(true);
       
-      // Subir a Firebase Storage y obtener URL pública
       const downloadUrl = await uploadImage(uri, storagePath);
       onUploadSuccess(downloadUrl);
       Alert.alert('Éxito', '¡Imagen cargada correctamente en Firebase Storage!');
@@ -246,6 +268,21 @@ export default function MaintainerDashboard() {
     );
   };
 
+  // Cambiar el estado de un pedido (Post-venta)
+  const handleUpdateStatus = async (orderId: string, status: Order['status']) => {
+    try {
+      setSaving(true);
+      await updateOrderStatus(orderId, status);
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o));
+      Alert.alert('Éxito', `Pedido marcado como ${status === 'completado' ? 'Completado' : 'Cancelado'}.`);
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Error', 'No se pudo actualizar el estado del pedido.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // Guardar Categoría CRUD (Crear o Editar)
   const handleSaveCatCrud = async () => {
     if (!catCrudName || !catCrudImg) {
@@ -272,7 +309,7 @@ export default function MaintainerDashboard() {
       setEditingCategory(null);
       setCatCrudName('');
       setCatCrudImg('');
-      loadData(); // Recargar datos locales
+      loadData();
     } catch (error) {
       console.error(error);
       Alert.alert('Error', 'No se pudo guardar la categoría.');
@@ -312,7 +349,6 @@ export default function MaintainerDashboard() {
   const handleLogout = async () => {
     try {
       await logoutUser();
-      // Redireccionamiento automático manejado en _layout.tsx
     } catch (error) {
       Alert.alert('Error', 'No se pudo cerrar sesión.');
     }
@@ -336,7 +372,7 @@ export default function MaintainerDashboard() {
           <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
             <Ionicons name="storefront" size={32} color={colors.primary} />
             <Typography variant="h1" style={{ marginLeft: spacing.s, flex: 1 }} numberOfLines={1}>
-              {activeTab === 'categorias' ? 'Administración' : (business ? 'Mi Comercio' : 'Registra tu Local')}
+              {activeTab === 'categorias' ? 'Categorías' : (business ? 'Mi Comercio' : 'Registra tu Local')}
             </Typography>
           </View>
           <Pressable onPress={handleLogout} style={styles.logoutBtn}>
@@ -351,11 +387,11 @@ export default function MaintainerDashboard() {
             Hola, {userProfile?.displayName || 'Emprendedor'}!
           </Typography>
           <Typography variant="body2" color={colors.textMuted}>
-            Administra tu información, sube tus fotos al Storage y gestiona categorías en tiempo real.
+            Administra tu negocio local y da seguimiento post-venta a los pedidos de tus clientes.
           </Typography>
         </View>
 
-        {/* Pestañas de Navegación del Panel (Pestaña Categorías Integrada) */}
+        {/* Pestañas de Navegación del Panel (Pedidos Integrada) */}
         <View style={styles.tabsRow}>
           <Button 
             title="Perfil" 
@@ -367,6 +403,15 @@ export default function MaintainerDashboard() {
             title="Catálogo" 
             variant={activeTab === 'catalogo' ? 'primary' : 'ghost'} 
             onPress={() => setActiveTab('catalogo')}
+            style={styles.tabBtn}
+          />
+          <Button 
+            title="Pedidos" 
+            variant={activeTab === 'pedidos' ? 'primary' : 'ghost'} 
+            onPress={() => {
+              setActiveTab('pedidos');
+              if (business?.id) loadOrders(business.id);
+            }}
             style={styles.tabBtn}
           />
           <Button 
@@ -418,7 +463,7 @@ export default function MaintainerDashboard() {
                 editable={!saving}
               />
 
-              {/* Sección de Foto de Portada con Subida Real a Storage */}
+              {/* Foto de Portada con Subida Real a Storage */}
               <Typography variant="body2" style={{ marginBottom: spacing.xs, fontWeight: 'bold' }}>Foto de Portada del Local</Typography>
               <View style={styles.imageSelectorRow}>
                 {imageUrl ? (
@@ -542,6 +587,87 @@ export default function MaintainerDashboard() {
                       <Ionicons name="trash-outline" size={20} color={colors.error} />
                     </Pressable>
                   </View>
+                ))
+              )}
+            </View>
+          ) : activeTab === 'pedidos' ? (
+            // PESTAÑA: PEDIDOS RECIBIDOS (Venta y Post-venta)
+            <View>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.l }}>
+                <Typography variant="h3">Pedidos Recibidos</Typography>
+                <Pressable onPress={() => business?.id && loadOrders(business.id)}>
+                  <Ionicons name="refresh-outline" size={24} color={colors.primary} />
+                </Pressable>
+              </View>
+
+              {loadingOrders ? (
+                <ActivityIndicator size="large" color={colors.primary} style={{ marginVertical: spacing.xl }} />
+              ) : orders.length === 0 ? (
+                <View style={styles.emptyContainer}>
+                  <Ionicons name="receipt-outline" size={48} color={colors.textMuted} />
+                  <Typography variant="body1" color={colors.textMuted} style={{ marginTop: spacing.s, textAlign: 'center' }}>
+                    No has recibido ningún pedido aún.
+                  </Typography>
+                </View>
+              ) : (
+                orders.map((ord) => (
+                  <Card key={ord.id} style={styles.orderCard} noPadding>
+                    <View style={styles.orderHeader}>
+                      <View style={{ flex: 1 }}>
+                        <Typography variant="body1" style={{ fontWeight: 'bold' }}>{ord.clientName}</Typography>
+                        <Typography variant="caption">
+                          {ord.createdAt instanceof Date ? ord.createdAt.toLocaleString() : 'Hace poco'}
+                        </Typography>
+                      </View>
+                      
+                      <View style={[
+                        styles.statusBadge, 
+                        ord.status === 'completado' && styles.statusCompleted,
+                        ord.status === 'cancelado' && styles.statusCancelled
+                      ]}>
+                        <Typography variant="caption" style={{ 
+                          fontWeight: 'bold',
+                          color: ord.status === 'pendiente' ? colors.warning : (ord.status === 'completado' ? colors.success : colors.error)
+                        }}>
+                          {ord.status.toUpperCase()}
+                        </Typography>
+                      </View>
+                    </View>
+
+                    <View style={styles.orderDetails}>
+                      {ord.items.map((item, idx) => (
+                        <Typography key={idx} variant="body2" color={colors.text}>
+                          • {item.quantity}x {item.name} (S/ {item.price.toFixed(2)} c/u)
+                        </Typography>
+                      ))}
+                      
+                      <View style={styles.orderTotalRow}>
+                        <Typography variant="body1" style={{ fontWeight: 'bold' }}>Total:</Typography>
+                        <Typography variant="body1" color={colors.primary} style={{ fontWeight: 'bold' }}>
+                          S/ {ord.total.toFixed(2)}
+                        </Typography>
+                      </View>
+                    </View>
+
+                    {ord.status === 'pendiente' && (
+                      <View style={styles.orderActions}>
+                        <Button 
+                          title="Completar" 
+                          variant="primary"
+                          onPress={() => handleUpdateStatus(ord.id!, 'completado')}
+                          style={{ flex: 1, marginRight: spacing.s, paddingVertical: spacing.xs }}
+                          disabled={saving}
+                        />
+                        <Button 
+                          title="Cancelar" 
+                          variant="outline"
+                          onPress={() => handleUpdateStatus(ord.id!, 'cancelado')}
+                          style={{ flex: 1, paddingVertical: spacing.xs }}
+                          disabled={saving}
+                        />
+                      </View>
+                    )}
+                  </Card>
                 ))
               )}
             </View>
@@ -936,5 +1062,50 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.m,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+  },
+  orderCard: {
+    marginBottom: spacing.m,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  orderHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: spacing.m,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: '#F9FAFB',
+    borderTopLeftRadius: radius.m,
+    borderTopRightRadius: radius.m,
+  },
+  statusBadge: {
+    paddingHorizontal: spacing.s,
+    paddingVertical: 4,
+    borderRadius: radius.s,
+    backgroundColor: colors.warning + '20',
+  },
+  statusCompleted: {
+    backgroundColor: colors.success + '20',
+  },
+  statusCancelled: {
+    backgroundColor: colors.error + '20',
+  },
+  orderDetails: {
+    padding: spacing.m,
+  },
+  orderTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: spacing.m,
+    paddingTop: spacing.s,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  orderActions: {
+    flexDirection: 'row',
+    padding: spacing.m,
+    paddingTop: 0,
   }
 });

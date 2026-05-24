@@ -1,4 +1,4 @@
-import { collection, getDocs, addDoc, query, where, GeoPoint, doc, updateDoc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, query, where, GeoPoint, doc, updateDoc, getDoc, setDoc, deleteDoc, orderBy } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase';
 
@@ -230,5 +230,138 @@ export const deleteCategory = async (id: string) => {
   } catch (error) {
     console.error('Error deleting category:', error);
     throw error;
+  }
+};
+
+export interface OrderItem {
+  name: string;
+  price: number;
+  quantity: number;
+}
+
+export interface Order {
+  id?: string;
+  businessId: string;
+  businessName: string;
+  clientId: string;
+  clientName: string;
+  items: OrderItem[];
+  total: number;
+  status: 'pendiente' | 'completado' | 'cancelado';
+  createdAt?: any;
+}
+
+export interface Review {
+  id?: string;
+  businessId: string;
+  clientId: string;
+  clientName: string;
+  rating: number;
+  comment: string;
+  createdAt?: any;
+}
+
+import { serverTimestamp } from 'firebase/firestore';
+
+export const orderCollection = collection(db, 'orders');
+export const reviewCollection = collection(db, 'reviews');
+
+export const createOrder = async (order: Omit<Order, 'id'>): Promise<string> => {
+  try {
+    const docRef = await addDoc(orderCollection, {
+      ...order,
+      createdAt: serverTimestamp()
+    });
+    return docRef.id;
+  } catch (error) {
+    console.error('Error al crear orden:', error);
+    throw error;
+  }
+};
+
+export const getOrdersByBusinessId = async (businessId: string): Promise<Order[]> => {
+  try {
+    const q = query(orderCollection, where('businessId', '==', businessId), orderBy('createdAt', 'desc'));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => {
+      const data = doc.data();
+      return { 
+        id: doc.id, 
+        ...data,
+        createdAt: data.createdAt ? data.createdAt.toDate() : new Date()
+      } as Order;
+    });
+  } catch (error) {
+    console.error('Error al obtener ordenes de negocio:', error);
+    try {
+      const qFallback = query(orderCollection, where('businessId', '==', businessId));
+      const snapshot = await getDocs(qFallback);
+      return snapshot.docs.map(doc => {
+        const data = doc.data();
+        return { 
+          id: doc.id, 
+          ...data,
+          createdAt: data.createdAt ? data.createdAt.toDate() : new Date()
+        } as Order;
+      });
+    } catch (fallbackError) {
+      console.error('Error en fallback de ordenes:', fallbackError);
+      return [];
+    }
+  }
+};
+
+export const updateOrderStatus = async (orderId: string, status: Order['status']) => {
+  try {
+    const docRef = doc(db, 'orders', orderId);
+    await updateDoc(docRef, { status });
+  } catch (error) {
+    console.error('Error al actualizar estado de orden:', error);
+    throw error;
+  }
+};
+
+export const createReview = async (review: Omit<Review, 'id'>): Promise<string> => {
+  try {
+    const docRef = await addDoc(reviewCollection, {
+      ...review,
+      createdAt: serverTimestamp()
+    });
+    return docRef.id;
+  } catch (error) {
+    console.error('Error al crear reseña:', error);
+    throw error;
+  }
+};
+
+export const getReviewsByBusinessId = async (businessId: string): Promise<Review[]> => {
+  try {
+    const q = query(reviewCollection, where('businessId', '==', businessId), orderBy('createdAt', 'desc'));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => {
+      const data = doc.data();
+      return { 
+        id: doc.id, 
+        ...data,
+        createdAt: data.createdAt ? data.createdAt.toDate() : new Date()
+      } as Review;
+    });
+  } catch (error) {
+    console.error('Error al obtener reseñas:', error);
+    try {
+      const qFallback = query(reviewCollection, where('businessId', '==', businessId));
+      const snapshot = await getDocs(qFallback);
+      return snapshot.docs.map(doc => {
+        const data = doc.data();
+        return { 
+          id: doc.id, 
+          ...data,
+          createdAt: data.createdAt ? data.createdAt.toDate() : new Date()
+        } as Review;
+      });
+    } catch (fallbackError) {
+      console.error('Error en fallback de reseñas:', fallbackError);
+      return [];
+    }
   }
 };
