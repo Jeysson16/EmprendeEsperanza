@@ -1,13 +1,13 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, Pressable, ImageBackground } from 'react-native';
-import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
+import { useAuth } from '@/core/context/AuthContext';
+import { colors, shadows, spacing } from '@/core/theme';
 import { Button } from '@/shared/components/Button';
 import { Input } from '@/shared/components/Input';
 import { Typography } from '@/shared/components/Typography';
-import { colors, spacing, shadows } from '@/core/theme';
-import { useAuth } from '@/core/context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
+import { useState } from 'react';
+import { ActivityIndicator, ImageBackground, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -63,7 +63,7 @@ export default function RegisterScreen() {
         <ScrollView contentContainerStyle={styles.scroll}>
           <View style={styles.header}>
             <Image 
-              source={require('../../../assets/images/logo_esperanza.svg')} 
+              source={require('../../../assets/images/logo_esperanza.png')} 
               style={styles.logo}
               contentFit="contain"
             />
@@ -189,8 +189,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logo: {
-    width: 100,
-    height: 100,
+    width: 200,
+    height: 200,
     marginBottom: spacing.m,
   },
   form: {

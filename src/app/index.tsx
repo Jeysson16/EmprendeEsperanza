@@ -1,12 +1,11 @@
-import React from 'react';
-import { View, StyleSheet, ScrollView, ActivityIndicator, ImageBackground } from 'react-native';
-import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
+import { useAuth } from '@/core/context/AuthContext';
+import { colors, layout, spacing } from '@/core/theme';
 import { Button } from '@/shared/components/Button';
 import { Card } from '@/shared/components/Card';
 import { Typography } from '@/shared/components/Typography';
-import { colors, spacing, layout } from '@/core/theme';
-import { useAuth } from '@/core/context/AuthContext';
+import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
+import { ActivityIndicator, ImageBackground, ScrollView, StyleSheet, View } from 'react-native';
 
 export default function WelcomeScreen() {
   const router = useRouter();
@@ -31,7 +30,7 @@ export default function WelcomeScreen() {
         <View style={layout.getContainerStyle()}>
           <View style={styles.header}>
             <Image 
-              source={require('../../assets/images/logo_esperanza.svg')} 
+              source={require('../../assets/images/logo_esperanza.png')} 
               style={styles.logo}
               contentFit="contain"
             />
