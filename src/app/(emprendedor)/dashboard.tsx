@@ -21,6 +21,7 @@ import { Button } from '@/shared/components/Button';
 import { Card } from '@/shared/components/Card';
 import { Input } from '@/shared/components/Input';
 import { Typography } from '@/shared/components/Typography';
+import { MapPicker } from '@/shared/components/Map';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
@@ -55,6 +56,8 @@ export default function MaintainerDashboard() {
   // Coordenadas del local
   const [locLat, setLocLat] = useState('');
   const [locLng, setLocLng] = useState('');
+  const [isMapPickerVisible, setIsMapPickerVisible] = useState(false);
+  const [tempLocation, setTempLocation] = useState<{ latitude: number; longitude: number } | null>(null);
 
   // Pedidos del negocio
   const [orders, setOrders] = useState<Order[]>([]);
@@ -573,13 +576,58 @@ export default function MaintainerDashboard() {
               </View>
 
               {/* ── Ubicación del Local ── */}
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.m, marginBottom: spacing.xs }}>
-                <Typography variant="body2" style={{ fontWeight: 'bold' }}>
-                  Ubicación en el Mapa *
-                </Typography>
-                <Pressable
-                  style={styles.gpsBtn}
+              <Typography variant="body2" style={{ fontWeight: 'bold', marginTop: spacing.m, marginBottom: spacing.xs }}>
+                Ubicación en el Mapa *
+              </Typography>
+
+              {locLat && locLng ? (
+                <View style={styles.coordPreviewCard}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Ionicons name="location" size={18} color={colors.primary} />
+                    <Typography variant="body2" style={{ fontWeight: '700', color: colors.primary }}>
+                      Ubicación configurada
+                    </Typography>
+                  </View>
+                  <Typography variant="caption" color={colors.textMuted} style={{ marginTop: 4 }}>
+                    Latitud: {parseFloat(locLat).toFixed(6)} · Longitud: {parseFloat(locLng).toFixed(6)}
+                  </Typography>
+                </View>
+              ) : (
+                <View style={[styles.coordPreviewCard, { borderColor: colors.error, backgroundColor: '#FDF2F2' }]}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Ionicons name="alert-circle" size={18} color={colors.error} />
+                    <Typography variant="body2" style={{ fontWeight: '700', color: colors.error }}>
+                      Sin ubicación asignada
+                    </Typography>
+                  </View>
+                  <Typography variant="caption" color={colors.textMuted} style={{ marginTop: 4 }}>
+                    Debes seleccionar las coordenadas en el mapa o usar tu GPS para continuar.
+                  </Typography>
+                </View>
+              )}
+
+              <View style={styles.mapActionsRow}>
+                <Button 
+                  title="Seleccionar en Mapa"
+                  onPress={() => {
+                    setTempLocation({
+                      latitude: parseFloat(locLat) || -8.0777,
+                      longitude: parseFloat(locLng) || -79.0354,
+                    });
+                    setIsMapPickerVisible(true);
+                  }}
+                  style={{ flex: 1 }}
                   disabled={saving}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Ionicons name="map" size={18} color="#fff" />
+                    <Typography variant="body2" style={{ color: '#fff', fontWeight: 'bold' }}>Mapa</Typography>
+                  </View>
+                </Button>
+
+                <Button
+                  title="Usar GPS"
+                  variant="outline"
                   onPress={async () => {
                     try {
                       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -595,46 +643,15 @@ export default function MaintainerDashboard() {
                       Alert.alert('Error', 'No se pudo obtener la ubicación.');
                     }
                   }}
+                  style={{ flex: 1 }}
+                  disabled={saving}
                 >
-                  <Ionicons name="locate" size={14} color="#fff" />
-                  <Typography variant="caption" style={{ color: '#fff', marginLeft: 4, fontWeight: '600' }}>
-                    Usar mi ubicación
-                  </Typography>
-                </Pressable>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Ionicons name="locate" size={18} color={colors.primary} />
+                    <Typography variant="body2" style={{ color: colors.primary, fontWeight: 'bold' }}>GPS</Typography>
+                  </View>
+                </Button>
               </View>
-              <View style={styles.coordsRow}>
-                <View style={{ flex: 1 }}>
-                  <Input
-                    label="Latitud"
-                    placeholder="-8.077700"
-                    style={styles.input}
-                    value={locLat}
-                    onChangeText={setLocLat}
-                    keyboardType="numbers-and-punctuation"
-                    editable={!saving}
-                  />
-                </View>
-                <View style={{ width: spacing.m }} />
-                <View style={{ flex: 1 }}>
-                  <Input
-                    label="Longitud"
-                    placeholder="-79.035400"
-                    style={styles.input}
-                    value={locLng}
-                    onChangeText={setLocLng}
-                    keyboardType="numbers-and-punctuation"
-                    editable={!saving}
-                  />
-                </View>
-              </View>
-              {(locLat && locLng) && (
-                <View style={styles.coordPreview}>
-                  <Ionicons name="location" size={14} color={colors.primary} />
-                  <Typography variant="caption" color={colors.primary} style={{ marginLeft: 4 }}>
-                    Coordenadas: {parseFloat(locLat).toFixed(5)}, {parseFloat(locLng).toFixed(5)}
-                  </Typography>
-                </View>
-              )}
               
               {saving ? (
                 <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: spacing.m }} />
@@ -967,6 +984,56 @@ export default function MaintainerDashboard() {
         </View>
       </Modal>
 
+      {/* MODAL DE SELECCIÓN DE UBICACIÓN EN MAPA */}
+      <Modal visible={isMapPickerVisible} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxWidth: 600, height: '80%' }]}>
+            <View style={styles.modalHeader}>
+              <Typography variant="h2" style={{ fontWeight: 'bold' }}>Ubica tu Negocio</Typography>
+              <Pressable onPress={() => setIsMapPickerVisible(false)} style={styles.modalCloseBtn}>
+                <Ionicons name="close" size={24} color={colors.text} />
+              </Pressable>
+            </View>
+            
+            <View style={{ flex: 1, position: 'relative' }}>
+              <MapPicker
+                initialLatitude={tempLocation?.latitude}
+                initialLongitude={tempLocation?.longitude}
+                onSelectLocation={(loc) => setTempLocation(loc)}
+              />
+            </View>
+
+            <View style={styles.pickerFooter}>
+              {tempLocation && (
+                <Typography variant="caption" color={colors.textMuted} style={{ marginBottom: spacing.s, textAlign: 'center' }}>
+                  Seleccionado: {tempLocation.latitude.toFixed(6)}, {tempLocation.longitude.toFixed(6)}
+                </Typography>
+              )}
+              <View style={{ flexDirection: 'row', gap: spacing.s }}>
+                <Button
+                  title="Cancelar"
+                  variant="outline"
+                  onPress={() => setIsMapPickerVisible(false)}
+                  style={{ flex: 1 }}
+                />
+                <Button
+                  title="Confirmar Ubicación"
+                  variant="primary"
+                  onPress={() => {
+                    if (tempLocation) {
+                      setLocLat(tempLocation.latitude.toFixed(6));
+                      setLocLng(tempLocation.longitude.toFixed(6));
+                    }
+                    setIsMapPickerVisible(false);
+                  }}
+                  style={{ flex: 1 }}
+                />
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
     </ScrollView>
   );
 }
@@ -1074,26 +1141,24 @@ const styles = StyleSheet.create({
     borderRadius: radius.s,
     marginBottom: spacing.m,
   },
-  gpsBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.primary,
-    paddingHorizontal: spacing.m,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.round,
-  },
-  coordsRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  coordPreview: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.primary + '12',
-    padding: spacing.s,
-    borderRadius: radius.s,
+  coordPreviewCard: {
+    borderWidth: 1.5,
+    borderColor: colors.primary + '30',
+    backgroundColor: colors.primary + '08',
+    padding: spacing.m,
+    borderRadius: radius.m,
     marginBottom: spacing.m,
-    marginTop: -spacing.s,
+  },
+  mapActionsRow: {
+    flexDirection: 'row',
+    gap: spacing.m,
+    marginBottom: spacing.m,
+  },
+  pickerFooter: {
+    padding: spacing.l,
+    backgroundColor: colors.surface,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
   productRow: {
     flexDirection: 'row',

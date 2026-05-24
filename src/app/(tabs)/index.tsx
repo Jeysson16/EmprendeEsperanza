@@ -48,7 +48,7 @@ function getBoundsForBusinesses(
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 export default function MapScreen() {
   const router = useRouter();
-  const { user, userProfile, logoutUser } = useAuth();
+  const { user, userProfile, logoutUser, updateUserProfileData } = useAuth();
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [businesses, setBusinesses] = useState<(Business & { distance?: number })[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -57,6 +57,13 @@ export default function MapScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [loadingData, setLoadingData] = useState(true);
   const [mapRegion, setMapRegion] = useState<MapRegion | null>(null);
+
+  // States for client profile modal
+  const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [updatingProfile, setUpdatingProfile] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileSuccess, setProfileSuccess] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -92,22 +99,57 @@ export default function MapScreen() {
     if (!user) {
       router.push('/(auth)/login');
     } else {
-      Alert.alert(
-        `${userProfile?.displayName || 'Usuario'}`,
-        `Rol: ${userProfile?.role === 'emprendedor' ? 'Emprendedor' : 'Cliente'}\nCorreo: ${user.email}`,
-        [
-          { text: 'Cancelar', style: 'cancel' },
-          ...(userProfile?.role === 'emprendedor' ? [
-            { text: 'Panel de Control', onPress: () => router.push('/(emprendedor)/dashboard') }
-          ] : []),
-          {
-            text: 'Cerrar Sesión', style: 'destructive', onPress: async () => {
-              try { await logoutUser(); router.replace('/'); } catch (err) { console.error(err); }
+      setEditName(userProfile?.displayName || '');
+      setProfileError(null);
+      setProfileSuccess(false);
+      setIsProfileModalVisible(true);
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    if (!editName.trim()) {
+      setProfileError('El nombre no puede estar vacío.');
+      return;
+    }
+    setUpdatingProfile(true);
+    setProfileError(null);
+    setProfileSuccess(false);
+    try {
+      await updateUserProfileData(editName.trim());
+      setProfileSuccess(true);
+      setTimeout(() => {
+        setIsProfileModalVisible(false);
+        setProfileSuccess(false);
+      }, 1500);
+    } catch (err: any) {
+      console.error(err);
+      setProfileError('Error al guardar los cambios.');
+    } finally {
+      setUpdatingProfile(false);
+    }
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Cerrar Sesión',
+      '¿Estás seguro de que deseas cerrar sesión?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { 
+          text: 'Sí, Salir', 
+          style: 'destructive', 
+          onPress: async () => {
+            setIsProfileModalVisible(false);
+            try {
+              await logoutUser();
+              router.replace('/');
+            } catch (err) {
+              console.error(err);
             }
           }
-        ]
-      );
-    }
+        }
+      ]
+    );
   };
 
   // Filter businesses by category and search
@@ -178,7 +220,7 @@ export default function MapScreen() {
 
         {/* Search bar row - full width */}
         <View style={styles.searchRow}>
-          <View style={styles.searchBox}>
+          <View style={[styles.searchBox, !user && { marginRight: 60 }]}>
             <Ionicons name="search" size={18} color={colors.primary} />
             <TextInput
               placeholder="Buscar negocios en La Esperanza..."
@@ -194,13 +236,15 @@ export default function MapScreen() {
               </Pressable>
             )}
           </View>
-          <Pressable style={styles.profileBtn} onPress={handleProfilePress}>
-            <Ionicons
-              name={user ? 'person-circle' : 'log-in-outline'}
-              size={26}
-              color={user ? colors.primary : colors.text}
-            />
-          </Pressable>
+          {user && (
+            <Pressable style={styles.profileBtn} onPress={handleProfilePress}>
+              <Ionicons
+                name="person-circle"
+                size={26}
+                color={colors.primary}
+              />
+            </Pressable>
+          )}
         </View>
 
         {/* Category chips horizontal scroll */}
@@ -366,6 +410,113 @@ export default function MapScreen() {
           </Typography>
         </View>
       )}
+
+      {/* MODAL DE PERFIL */}
+      <Modal
+        visible={isProfileModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setIsProfileModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {/* Cabecera */}
+            <View style={styles.modalHeader}>
+              <Typography variant="h2" style={{ fontWeight: 'bold' }}>Mi Perfil</Typography>
+              <Pressable 
+                onPress={() => setIsProfileModalVisible(false)}
+                style={styles.modalCloseBtn}
+              >
+                <Ionicons name="close" size={24} color={colors.text} />
+              </Pressable>
+            </View>
+
+            <ScrollView contentContainerStyle={styles.modalForm}>
+              {profileError && (
+                <View style={styles.errorBanner}>
+                  <Ionicons name="alert-circle" size={20} color={colors.error} />
+                  <Typography variant="body2" color={colors.error} style={{ marginLeft: spacing.xs, flex: 1 }}>
+                    {profileError}
+                  </Typography>
+                </View>
+              )}
+
+              {profileSuccess && (
+                <View style={styles.successBanner}>
+                  <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+                  <Typography variant="body2" color={colors.success} style={{ marginLeft: spacing.xs, flex: 1 }}>
+                    ¡Perfil actualizado correctamente!
+                  </Typography>
+                </View>
+              )}
+
+              {/* Nombre (Editable) */}
+              <Input
+                label="Nombre Completo"
+                placeholder="Ingresa tu nombre"
+                value={editName}
+                onChangeText={setEditName}
+                editable={!updatingProfile}
+              />
+
+              {/* Correo (Lectura) */}
+              <View style={styles.readOnlyContainer}>
+                <Typography variant="body2" style={styles.readOnlyLabel}>Correo Electrónico</Typography>
+                <View style={styles.readOnlyInput}>
+                  <Typography variant="body1" color={colors.textMuted}>{user?.email || ''}</Typography>
+                </View>
+              </View>
+
+              {/* Rol (Lectura) */}
+              <View style={styles.readOnlyContainer}>
+                <Typography variant="body2" style={styles.readOnlyLabel}>Tipo de Cuenta</Typography>
+                <View style={styles.readOnlyInput}>
+                  <Typography variant="body1" color={colors.textMuted}>
+                    {userProfile?.role === 'emprendedor' ? 'Emprendedor' : 'Cliente'}
+                  </Typography>
+                </View>
+              </View>
+
+              {/* Botón de Guardar */}
+              <Button
+                title="Guardar Cambios"
+                onPress={handleSaveProfile}
+                isLoading={updatingProfile}
+                style={{ marginTop: spacing.m }}
+              />
+
+              {/* Botón Panel de Control (Si es Emprendedor) */}
+              {userProfile?.role === 'emprendedor' && (
+                <Button
+                  title="Panel de Control"
+                  variant="outline"
+                  onPress={() => {
+                    setIsProfileModalVisible(false);
+                    router.push('/(emprendedor)/dashboard');
+                  }}
+                  style={{ marginTop: spacing.s }}
+                />
+              )}
+
+              {/* Divisor */}
+              <View style={styles.modalDivider} />
+
+              {/* Botón de Cerrar Sesión */}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.logoutBtn,
+                  pressed && { opacity: 0.8 }
+                ]}
+                onPress={handleLogout}
+              >
+                <Typography variant="body1" style={{ color: colors.error, fontWeight: '600' }}>
+                  Cerrar Sesión
+                </Typography>
+              </Pressable>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -567,5 +718,84 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     marginTop: spacing.s,
     ...shadows.soft,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.m,
+  },
+  modalContent: {
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    width: '100%',
+    maxWidth: 440,
+    maxHeight: '90%',
+    ...shadows.floating,
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: spacing.l,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  modalCloseBtn: {
+    padding: spacing.xs,
+  },
+  modalForm: {
+    padding: spacing.l,
+    gap: spacing.s,
+  },
+  readOnlyContainer: {
+    marginBottom: spacing.m,
+  },
+  readOnlyLabel: {
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: spacing.xs,
+  },
+  readOnlyInput: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: radius.m,
+    paddingHorizontal: spacing.m,
+    paddingVertical: spacing.m,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFEBEE',
+    padding: spacing.m,
+    borderRadius: radius.m,
+    marginBottom: spacing.m,
+  },
+  successBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F5E9',
+    padding: spacing.m,
+    borderRadius: radius.m,
+    marginBottom: spacing.m,
+  },
+  modalDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: spacing.l,
+  },
+  logoutBtn: {
+    paddingVertical: spacing.m,
+    paddingHorizontal: spacing.xl,
+    borderRadius: radius.round,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.error,
+    backgroundColor: 'transparent',
+    marginTop: spacing.s,
   },
 });

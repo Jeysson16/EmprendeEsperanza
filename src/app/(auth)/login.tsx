@@ -10,7 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { login, loginWithGoogle } = useAuth();
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -41,18 +41,6 @@ export default function LoginScreen() {
     }
   };
 
-  const handleGoogleLogin = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      await loginWithGoogle('cliente'); // Se registra como cliente por defecto al usar Google rápido
-    } catch (err: any) {
-      console.error(err);
-      setError('Error al iniciar sesión con Google.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <KeyboardAvoidingView 
@@ -98,27 +86,7 @@ export default function LoginScreen() {
           {loading ? (
             <ActivityIndicator size="large" color={colors.primary} style={{ marginVertical: spacing.l }} />
           ) : (
-            <>
-              <Button title="Ingresar" onPress={handleLogin} style={{ marginTop: spacing.l }} />
-              
-              <View style={styles.dividerContainer}>
-                <View style={styles.divider} />
-                <Typography variant="body2" color={colors.textMuted} style={styles.dividerText}>O continúa con</Typography>
-                <View style={styles.divider} />
-              </View>
-
-              <Button 
-                title="Iniciar sesión con Google" 
-                variant="outline" 
-                onPress={handleGoogleLogin}
-                style={styles.googleBtn}
-              >
-                <View style={styles.googleBtnContent}>
-                  <Ionicons name="logo-google" size={18} color="#EA4335" style={{ marginRight: spacing.s }} />
-                  <Typography variant="body1" style={{ fontWeight: '600' }}>Google</Typography>
-                </View>
-              </Button>
-            </>
+            <Button title="Ingresar" onPress={handleLogin} style={{ marginTop: spacing.l }} />
           )}
           
           <Button 
@@ -171,28 +139,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: spacing.m,
   },
-  dividerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: spacing.l,
-  },
-  divider: {
-    flex: 1,
-    height: 1,
-    backgroundColor: colors.border,
-  },
-  dividerText: {
-    marginHorizontal: spacing.m,
-  },
-  googleBtn: {
-    borderColor: '#DFE1E5',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-  },
-  googleBtnContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  }
+
 });
 

@@ -10,7 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 export default function RegisterScreen() {
   const router = useRouter();
-  const { register, loginWithGoogle } = useAuth();
+  const { register } = useAuth();
   const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -49,18 +49,6 @@ export default function RegisterScreen() {
     }
   };
 
-  const handleGoogleRegister = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      await loginWithGoogle(role); // Registra al usuario con el rol actualmente seleccionado
-    } catch (err: any) {
-      console.error(err);
-      setError('Error al registrarse con Google.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <KeyboardAvoidingView 
@@ -146,27 +134,7 @@ export default function RegisterScreen() {
           {loading ? (
             <ActivityIndicator size="large" color={colors.primary} style={{ marginVertical: spacing.l }} />
           ) : (
-            <>
-              <Button title="Registrarse" onPress={handleRegister} style={{ marginTop: spacing.l }} />
-              
-              <View style={styles.dividerContainer}>
-                <View style={styles.divider} />
-                <Typography variant="body2" color={colors.textMuted} style={styles.dividerText}>O regístrate con</Typography>
-                <View style={styles.divider} />
-              </View>
-
-              <Button 
-                title="Registrarse con Google" 
-                variant="outline" 
-                onPress={handleGoogleRegister}
-                style={styles.googleBtn}
-              >
-                <View style={styles.googleBtnContent}>
-                  <Ionicons name="logo-google" size={18} color="#EA4335" style={{ marginRight: spacing.s }} />
-                  <Typography variant="body1" style={{ fontWeight: '600' }}>Google</Typography>
-                </View>
-              </Button>
-            </>
+            <Button title="Registrarse" onPress={handleRegister} style={{ marginTop: spacing.l }} />
           )}
           
           <Button 
@@ -248,28 +216,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: spacing.m,
   },
-  dividerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: spacing.l,
-  },
-  divider: {
-    flex: 1,
-    height: 1,
-    backgroundColor: colors.border,
-  },
-  dividerText: {
-    marginHorizontal: spacing.m,
-  },
-  googleBtn: {
-    borderColor: '#DFE1E5',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-  },
-  googleBtnContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  }
+
 });
 
