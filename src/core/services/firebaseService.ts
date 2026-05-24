@@ -1,5 +1,6 @@
-import { collection, getDocs, addDoc, query, where, GeoPoint, doc, updateDoc, getDoc, setDoc } from 'firebase/firestore';
-import { db } from '../firebase';
+import { collection, getDocs, addDoc, query, where, GeoPoint, doc, updateDoc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../firebase';
 
 export interface Location {
   latitude: number;
@@ -187,4 +188,47 @@ export const seedInitialData = async (lat: number, lng: number) => {
     await createBusiness(b);
   }
   console.log('Seed completado con éxito!');
+};
+
+export const uploadImage = async (uri: string, path: string): Promise<string> => {
+  try {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    const storageRef = ref(storage, path);
+    await uploadBytes(storageRef, blob);
+    return await getDownloadURL(storageRef);
+  } catch (error) {
+    console.error('Error al subir imagen a storage:', error);
+    throw error;
+  }
+};
+
+export const createCategory = async (category: Omit<Category, 'id'>) => {
+  try {
+    const docRef = await addDoc(categoryCollection, category);
+    return docRef.id;
+  } catch (error) {
+    console.error('Error creating category:', error);
+    throw error;
+  }
+};
+
+export const updateCategory = async (id: string, data: Partial<Category>) => {
+  try {
+    const docRef = doc(db, 'categories', id);
+    await updateDoc(docRef, data);
+  } catch (error) {
+    console.error('Error updating category:', error);
+    throw error;
+  }
+};
+
+export const deleteCategory = async (id: string) => {
+  try {
+    const docRef = doc(db, 'categories', id);
+    await deleteDoc(docRef);
+  } catch (error) {
+    console.error('Error deleting category:', error);
+    throw error;
+  }
 };

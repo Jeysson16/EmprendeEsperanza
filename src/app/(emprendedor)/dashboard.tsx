@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, Modal, ActivityIndicator, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, Modal, ActivityIndicator, Alert, Image } from 'react-native';
 import { useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import { Typography } from '@/shared/components/Typography';
 import { Input } from '@/shared/components/Input';
 import { Button } from '@/shared/components/Button';
@@ -13,6 +14,10 @@ import {
   getBusinessByOwnerId, 
   createBusiness, 
   updateBusiness, 
+  createCategory,
+  updateCategory,
+  deleteCategory,
+  uploadImage,
   Category, 
   Business, 
   Product 
@@ -22,14 +27,15 @@ export default function MaintainerDashboard() {
   const router = useRouter();
   const { user, logoutUser, userProfile } = useAuth();
   
-  const [activeTab, setActiveTab] = useState<'perfil' | 'catalogo'>('perfil');
+  const [activeTab, setActiveTab] = useState<'perfil' | 'catalogo' | 'categorias'>('perfil');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   
   // Datos del Negocio en Firestore
   const [business, setBusiness] = useState<Business | null>(null);
 
-  // Campos del Formulario
+  // Campos del Formulario (Negocio)
   const [businessName, setBusinessName] = useState('');
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
@@ -41,6 +47,12 @@ export default function MaintainerDashboard() {
   // Categorías de Firestore
   const [categories, setCategories] = useState<Category[]>([]);
   const [isCategoryModalVisible, setCategoryModalVisible] = useState(false);
+
+  // Campos del Formulario (Categorías CRUD)
+  const [isCatCrudModalVisible, setCatCrudModalVisible] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [catCrudName, setCatCrudName] = useState('');
+  const [catCrudImg, setCatCrudImg] = useState('');
   
   // Estado para Modal de Nuevo Producto
   const [isProductModalVisible, setProductModalVisible] = useState(false);
@@ -86,6 +98,38 @@ export default function MaintainerDashboard() {
     loadData();
   }, [user]);
 
+  // Helper para abrir la galería y subir la foto a Storage
+  const handleSelectAndUploadImage = async (storagePath: string, onUploadSuccess: (url: string) => void) => {
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permissionResult.granted) {
+        Alert.alert('Permisos requeridos', 'Se requiere acceso a la galería para poder subir fotos.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.8,
+      });
+
+      if (result.canceled) return;
+
+      const uri = result.assets[0].uri;
+      setUploadingImage(true);
+      
+      // Subir a Firebase Storage y obtener URL pública
+      const downloadUrl = await uploadImage(uri, storagePath);
+      onUploadSuccess(downloadUrl);
+      Alert.alert('Éxito', '¡Imagen cargada correctamente en Firebase Storage!');
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Error', 'Hubo un fallo al subir la imagen.');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
   const handleSaveProfile = async () => {
     if (!user) return;
     if (!businessName || !address || !selectedCategory || !phone) {
@@ -124,6 +168,7 @@ export default function MaintainerDashboard() {
     }
   };
 
+  // Agregar producto al catálogo
   const handleAddProduct = async () => {
     if (!business?.id) {
       Alert.alert('Negocio requerido', 'Debes guardar primero el perfil de tu negocio antes de agregar productos.');
@@ -201,6 +246,69 @@ export default function MaintainerDashboard() {
     );
   };
 
+  // Guardar Categoría CRUD (Crear o Editar)
+  const handleSaveCatCrud = async () => {
+    if (!catCrudName || !catCrudImg) {
+      Alert.alert('Campos incompletos', 'Ingresa el nombre y selecciona una imagen para la categoría.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const catData = {
+        name: catCrudName,
+        imageUrl: catCrudImg
+      };
+
+      if (editingCategory?.id) {
+        await updateCategory(editingCategory.id, catData);
+        Alert.alert('Éxito', 'Categoría modificada correctamente.');
+      } else {
+        await createCategory(catData);
+        Alert.alert('Éxito', 'Categoría creada correctamente.');
+      }
+
+      setCatCrudModalVisible(false);
+      setEditingCategory(null);
+      setCatCrudName('');
+      setCatCrudImg('');
+      loadData(); // Recargar datos locales
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Error', 'No se pudo guardar la categoría.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Eliminar Categoría CRUD
+  const handleDeleteCategory = async (id: string, catName: string) => {
+    Alert.alert(
+      'Eliminar Categoría',
+      `¿Deseas eliminar la categoría "${catName}"? Esto podría afectar a los negocios asociados.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            setSaving(true);
+            try {
+              await deleteCategory(id);
+              Alert.alert('Éxito', 'Categoría eliminada.');
+              loadData();
+            } catch (error) {
+              console.error(error);
+              Alert.alert('Error', 'No se pudo eliminar la categoría.');
+            } finally {
+              setSaving(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const handleLogout = async () => {
     try {
       await logoutUser();
@@ -214,7 +322,7 @@ export default function MaintainerDashboard() {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
-        <Typography variant="body1" style={{ marginTop: spacing.m }}>Cargando datos de tu negocio...</Typography>
+        <Typography variant="body1" style={{ marginTop: spacing.m }}>Cargando datos del panel...</Typography>
       </View>
     );
   }
@@ -228,7 +336,7 @@ export default function MaintainerDashboard() {
           <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
             <Ionicons name="storefront" size={32} color={colors.primary} />
             <Typography variant="h1" style={{ marginLeft: spacing.s, flex: 1 }} numberOfLines={1}>
-              {business ? 'Mi Comercio' : 'Registra tu Local'}
+              {activeTab === 'categorias' ? 'Administración' : (business ? 'Mi Comercio' : 'Registra tu Local')}
             </Typography>
           </View>
           <Pressable onPress={handleLogout} style={styles.logoutBtn}>
@@ -243,22 +351,28 @@ export default function MaintainerDashboard() {
             Hola, {userProfile?.displayName || 'Emprendedor'}!
           </Typography>
           <Typography variant="body2" color={colors.textMuted}>
-            Gestiona la información y el catálogo de tu negocio aquí. Los cambios se reflejarán inmediatamente para todos tus clientes en La Esperanza.
+            Administra tu información, sube tus fotos al Storage y gestiona categorías en tiempo real.
           </Typography>
         </View>
 
-        {/* Pestañas de Navegación del Panel */}
+        {/* Pestañas de Navegación del Panel (Pestaña Categorías Integrada) */}
         <View style={styles.tabsRow}>
           <Button 
-            title="Perfil del Local" 
+            title="Perfil" 
             variant={activeTab === 'perfil' ? 'primary' : 'ghost'} 
             onPress={() => setActiveTab('perfil')}
             style={styles.tabBtn}
           />
           <Button 
-            title="Gestión de Catálogo" 
+            title="Catálogo" 
             variant={activeTab === 'catalogo' ? 'primary' : 'ghost'} 
             onPress={() => setActiveTab('catalogo')}
+            style={styles.tabBtn}
+          />
+          <Button 
+            title="Categorías" 
+            variant={activeTab === 'categorias' ? 'primary' : 'ghost'} 
+            onPress={() => setActiveTab('categorias')}
             style={styles.tabBtn}
           />
         </View>
@@ -304,14 +418,31 @@ export default function MaintainerDashboard() {
                 editable={!saving}
               />
 
-              <Input 
-                label="URL de Foto de Portada (Opcional)"
-                placeholder="Ej. https://images.unsplash.com/..." 
-                style={styles.input} 
-                value={imageUrl}
-                onChangeText={setImageUrl}
-                editable={!saving}
-              />
+              {/* Sección de Foto de Portada con Subida Real a Storage */}
+              <Typography variant="body2" style={{ marginBottom: spacing.xs, fontWeight: 'bold' }}>Foto de Portada del Local</Typography>
+              <View style={styles.imageSelectorRow}>
+                {imageUrl ? (
+                  <Image source={{ uri: imageUrl }} style={styles.imagePreview} />
+                ) : (
+                  <View style={styles.imagePlaceholder}>
+                    <Ionicons name="image-outline" size={32} color={colors.textMuted} />
+                  </View>
+                )}
+                
+                {uploadingImage ? (
+                  <ActivityIndicator size="small" color={colors.primary} style={{ marginLeft: spacing.m }} />
+                ) : (
+                  <Button 
+                    title="Subir al Storage" 
+                    variant="outline" 
+                    onPress={() => handleSelectAndUploadImage(
+                      `businesses/${user?.uid || 'unknown'}/cover.jpg`, 
+                      setImageUrl
+                    )} 
+                    style={{ flex: 1, marginLeft: spacing.m }}
+                  />
+                )}
+              </View>
 
               <Input 
                 label="Descripción Corta del Negocio"
@@ -357,7 +488,7 @@ export default function MaintainerDashboard() {
                 />
               )}
             </View>
-          ) : (
+          ) : activeTab === 'catalogo' ? (
             <View>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.l }}>
                 <Typography variant="h3">Mis Productos</Typography>
@@ -387,9 +518,7 @@ export default function MaintainerDashboard() {
                   <View key={prod.name + idx} style={styles.productRow}>
                     <View style={styles.productImgContainer}>
                       {prod.imageUrl ? (
-                        <View style={{ width: 60, height: 60, borderRadius: 8, backgroundColor: '#eee', overflow: 'hidden' }}>
-                          <Pressable style={{ width: '100%', height: '100%', backgroundColor: colors.border }} />
-                        </View>
+                        <Image source={{ uri: prod.imageUrl }} style={{ width: 60, height: 60, borderRadius: 8 }} />
                       ) : (
                         <View style={styles.productImgPlaceholder}>
                           <Ionicons name="image-outline" size={24} color={colors.textMuted} />
@@ -416,12 +545,78 @@ export default function MaintainerDashboard() {
                 ))
               )}
             </View>
+          ) : (
+            // PESTAÑA: MANTENEDOR (CRUD) DE CATEGORÍAS
+            <View>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.l }}>
+                <Typography variant="h3">Categorías de Comercios</Typography>
+                <Button 
+                  title="+ Nueva Categoría" 
+                  variant="outline" 
+                  onPress={() => {
+                    setEditingCategory(null);
+                    setCatCrudName('');
+                    setCatCrudImg('');
+                    setCatCrudModalVisible(true);
+                  }}
+                  disabled={saving}
+                />
+              </View>
+
+              {categories.length === 0 ? (
+                <View style={styles.emptyContainer}>
+                  <Ionicons name="grid-outline" size={48} color={colors.textMuted} />
+                  <Typography variant="body1" color={colors.textMuted} style={{ marginTop: spacing.s, textAlign: 'center' }}>
+                    No hay categorías registradas en el sistema.
+                  </Typography>
+                </View>
+              ) : (
+                categories.map((cat) => (
+                  <View key={cat.id || cat.name} style={styles.productRow}>
+                    <View style={styles.productImgContainer}>
+                      {cat.imageUrl ? (
+                        <Image source={{ uri: cat.imageUrl }} style={{ width: 60, height: 60, borderRadius: 8 }} />
+                      ) : (
+                        <View style={styles.productImgPlaceholder}>
+                          <Ionicons name="image-outline" size={24} color={colors.textMuted} />
+                        </View>
+                      )}
+                    </View>
+                    <View style={{ flex: 1, marginLeft: spacing.m }}>
+                      <Typography variant="body1" style={{ fontWeight: 'bold' }}>{cat.name}</Typography>
+                      <Typography variant="body2" color={colors.textMuted} numberOfLines={1}>
+                        Colección: categories
+                      </Typography>
+                    </View>
+                    <Pressable 
+                      style={styles.actionIcon} 
+                      onPress={() => {
+                        setEditingCategory(cat);
+                        setCatCrudName(cat.name);
+                        setCatCrudImg(cat.imageUrl);
+                        setCatCrudModalVisible(true);
+                      }}
+                      disabled={saving}
+                    >
+                      <Ionicons name="create-outline" size={20} color={colors.primary} />
+                    </Pressable>
+                    <Pressable 
+                      style={[styles.actionIcon, { marginLeft: spacing.s }]} 
+                      onPress={() => handleDeleteCategory(cat.id!, cat.name)}
+                      disabled={saving}
+                    >
+                      <Ionicons name="trash-outline" size={20} color={colors.error} />
+                    </Pressable>
+                  </View>
+                ))
+              )}
+            </View>
           )}
         </Card>
 
       </View>
 
-      {/* MODAL DE SELECCIÓN DE CATEGORÍAS */}
+      {/* MODAL DE SELECCIÓN DE CATEGORÍAS (EN PERFIL) */}
       <Modal visible={isCategoryModalVisible} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -448,7 +643,7 @@ export default function MaintainerDashboard() {
         </View>
       </Modal>
 
-      {/* MODAL DE CREACIÓN DE PRODUCTO */}
+      {/* MODAL DE CREACIÓN/EDICIÓN DE PRODUCTO */}
       <Modal visible={isProductModalVisible} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -480,13 +675,35 @@ export default function MaintainerDashboard() {
                 onChangeText={setNewProductDesc}
                 style={styles.input}
               />
-              <Input 
-                label="URL de Imagen del Producto (Opcional)" 
-                placeholder="Ej. https://images.unsplash.com/..." 
-                value={newProductImg}
-                onChangeText={setNewProductImg}
-                style={styles.input}
-              />
+
+              {/* Subida de Imagen a Storage para Productos */}
+              <Typography variant="body2" style={{ marginBottom: spacing.xs, fontWeight: 'bold' }}>Imagen del Producto</Typography>
+              <View style={styles.imageSelectorRow}>
+                {newProductImg ? (
+                  <Image source={{ uri: newProductImg }} style={styles.imagePreview} />
+                ) : (
+                  <View style={styles.imagePlaceholder}>
+                    <Ionicons name="image-outline" size={32} color={colors.textMuted} />
+                  </View>
+                )}
+                
+                {uploadingImage ? (
+                  <ActivityIndicator size="small" color={colors.primary} style={{ marginLeft: spacing.m }} />
+                ) : (
+                  <Button 
+                    title="Subir Imagen" 
+                    variant="outline" 
+                    onPress={() => {
+                      const cleanName = newProductName.replace(/[^a-zA-Z0-9]/g, '_') || 'prod';
+                      handleSelectAndUploadImage(
+                        `businesses/${user?.uid || 'unknown'}/products/${cleanName}_${Date.now()}.jpg`,
+                        setNewProductImg
+                      );
+                    }} 
+                    style={{ flex: 1, marginLeft: spacing.m }}
+                  />
+                )}
+              </View>
             </ScrollView>
 
             <View style={{ flexDirection: 'row', marginTop: spacing.l }}>
@@ -495,13 +712,82 @@ export default function MaintainerDashboard() {
                 variant="outline" 
                 onPress={() => setProductModalVisible(false)} 
                 style={{ flex: 1, marginRight: spacing.s }}
-                disabled={saving}
+                disabled={saving || uploadingImage}
               />
               <Button 
                 title="Guardar Producto" 
                 onPress={handleAddProduct} 
                 style={{ flex: 1 }}
-                disabled={saving}
+                disabled={saving || uploadingImage}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL DE CREACIÓN/EDICIÓN DE CATEGORÍAS (CRUD MANTENEDOR) */}
+      <Modal visible={isCatCrudModalVisible} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.l }}>
+              <Typography variant="h3">
+                {editingCategory ? 'Editar Categoría' : 'Nueva Categoría'}
+              </Typography>
+              <Ionicons name="close" size={24} color={colors.text} onPress={() => setCatCrudModalVisible(false)} />
+            </View>
+            
+            <ScrollView style={{ maxHeight: 400 }}>
+              <Input 
+                label="Nombre de la Categoría *" 
+                placeholder="Ej. Panaderías, Fruterías..." 
+                value={catCrudName}
+                onChangeText={setCatCrudName}
+                style={styles.input}
+              />
+
+              {/* Subida de Imagen a Storage para Categorías */}
+              <Typography variant="body2" style={{ marginBottom: spacing.xs, fontWeight: 'bold' }}>Imagen de la Categoría</Typography>
+              <View style={styles.imageSelectorRow}>
+                {catCrudImg ? (
+                  <Image source={{ uri: catCrudImg }} style={styles.imagePreview} />
+                ) : (
+                  <View style={styles.imagePlaceholder}>
+                    <Ionicons name="image-outline" size={32} color={colors.textMuted} />
+                  </View>
+                )}
+                
+                {uploadingImage ? (
+                  <ActivityIndicator size="small" color={colors.primary} style={{ marginLeft: spacing.m }} />
+                ) : (
+                  <Button 
+                    title="Subir Imagen" 
+                    variant="outline" 
+                    onPress={() => {
+                      const cleanName = catCrudName.replace(/[^a-zA-Z0-9]/g, '_') || 'cat';
+                      handleSelectAndUploadImage(
+                        `categories/${cleanName}_${Date.now()}.jpg`,
+                        setCatCrudImg
+                      );
+                    }} 
+                    style={{ flex: 1, marginLeft: spacing.m }}
+                  />
+                )}
+              </View>
+            </ScrollView>
+
+            <View style={{ flexDirection: 'row', marginTop: spacing.l }}>
+              <Button 
+                title="Cancelar" 
+                variant="outline" 
+                onPress={() => setCatCrudModalVisible(false)} 
+                style={{ flex: 1, marginRight: spacing.s }}
+                disabled={saving || uploadingImage}
+              />
+              <Button 
+                title="Guardar" 
+                onPress={handleSaveCatCrud} 
+                style={{ flex: 1 }}
+                disabled={saving || uploadingImage}
               />
             </View>
           </View>
@@ -559,6 +845,27 @@ const styles = StyleSheet.create({
     borderRadius: radius.m,
     padding: spacing.m,
     marginBottom: spacing.m,
+  },
+  imageSelectorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.m,
+  },
+  imagePreview: {
+    width: 80,
+    height: 80,
+    borderRadius: radius.m,
+    backgroundColor: '#eee',
+  },
+  imagePlaceholder: {
+    width: 80,
+    height: 80,
+    borderRadius: radius.m,
+    backgroundColor: '#F5F5F7',
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   toggleRow: {
     flexDirection: 'row',
@@ -620,7 +927,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
     padding: spacing.l,
-    maxHeight: '80%',
+    maxHeight: '85%',
   },
   categoryItem: {
     flexDirection: 'row',
