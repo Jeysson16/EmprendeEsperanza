@@ -86,6 +86,7 @@ const leafletPickerHtml = `
     }).addTo(map);
 
     L.control.zoom({ position: 'topright' }).addTo(map);
+    map.setView([-8.0777, -79.0354], 14);
 
     var marker = null;
 

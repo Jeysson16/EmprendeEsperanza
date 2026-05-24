@@ -224,7 +224,11 @@ export default function BusinessProfileScreen() {
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={styles.screen}>
+      <View style={styles.bgDecor} pointerEvents="none">
+        <View style={styles.bgBlobPrimary} />
+        <View style={styles.bgBlobSecondary} />
+      </View>
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} bounces={false}>
         <View style={styles.coverContainer}>
           <ScrollView
@@ -673,8 +677,31 @@ export default function BusinessProfileScreen() {
 }
 
 const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.background },
   container: { flex: 1, backgroundColor: colors.background },
   scrollContent: { paddingBottom: 150 },
+  bgDecor: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
+  },
+  bgBlobPrimary: {
+    position: 'absolute',
+    width: 520,
+    height: 520,
+    borderRadius: 260,
+    backgroundColor: colors.primary + '14',
+    top: -220,
+    right: -220,
+  },
+  bgBlobSecondary: {
+    position: 'absolute',
+    width: 420,
+    height: 420,
+    borderRadius: 210,
+    backgroundColor: colors.primaryDark + '10',
+    bottom: -240,
+    left: -240,
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -786,12 +813,16 @@ const styles = StyleSheet.create({
     ...shadows.soft,
   },
   contentWrapper: {
-    backgroundColor: colors.surface,
-    marginTop: -40,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
+    flex: 0,
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    marginTop: -56,
+    borderRadius: radius.xl,
     padding: spacing.xl,
-    minHeight: 500,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.xl,
+    ...(Platform.OS !== 'web' ? { marginHorizontal: spacing.m } : {}),
+    ...shadows.medium,
   },
   badgeRow: {
     flexDirection: 'row',

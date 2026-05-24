@@ -1,22 +1,31 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useAuth } from '@/core/context/AuthContext';
 import {
-  View, StyleSheet, Platform, Pressable, Alert, ScrollView, TextInput,
-  ActivityIndicator, Image, Modal
-} from 'react-native';
-import { useRouter } from 'expo-router';
-import * as Location from 'expo-location';
-import { Typography } from '@/shared/components/Typography';
-import { Card } from '@/shared/components/Card';
+  Business, Category,
+  getBusinesses, getCategories,
+  seedInitialData
+} from '@/core/services/firebaseService';
+import { colors, radius, shadows, spacing } from '@/core/theme';
 import { Button } from '@/shared/components/Button';
 import { Input } from '@/shared/components/Input';
 import CustomMap from '@/shared/components/Map';
+import { getCategoryIconName } from '@/shared/components/Map/categoryIcons';
 import { MapRegion } from '@/shared/components/Map/CustomMap';
-import {
-  getBusinesses, getCategories, Business, Category, seedInitialData
-} from '@/core/services/firebaseService';
-import { colors, spacing, radius, shadows, layout } from '@/core/theme';
+import { Typography } from '@/shared/components/Typography';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '@/core/context/AuthContext';
+import * as Location from 'expo-location';
+import { Tabs, useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Image, Modal,
+  Platform, Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // ─── Compute best region to show all given businesses ────────────────────────
 function getBoundsForBusinesses(
@@ -48,7 +57,11 @@ function getBoundsForBusinesses(
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 export default function MapScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { user, userProfile, logoutUser, updateUserProfileData } = useAuth();
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [isLogoutConfirmVisible, setIsLogoutConfirmVisible] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [businesses, setBusinesses] = useState<(Business & { distance?: number })[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -126,26 +139,21 @@ export default function MapScreen() {
   };
 
   const handleLogout = () => {
-    Alert.alert(
-      'Cerrar Sesión',
-      '¿Estás seguro de que deseas cerrar sesión?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Sí, Salir', 
-          style: 'destructive', 
-          onPress: async () => {
-            setIsProfileModalVisible(false);
-            try {
-              await logoutUser();
-              router.replace('/');
-            } catch (err) {
-              console.error(err);
-            }
-          }
-        }
-      ]
-    );
+    setIsLogoutConfirmVisible(true);
+  };
+
+  const confirmLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      setIsLogoutConfirmVisible(false);
+      setIsProfileModalVisible(false);
+      await logoutUser();
+      router.replace('/');
+    } catch (err) {
+      Alert.alert('Error', 'No se pudo cerrar sesión. Inténtalo nuevamente.');
+    } finally {
+      setIsLoggingOut(false);
+    }
   };
 
   // Filter businesses by category and search
@@ -201,6 +209,20 @@ export default function MapScreen() {
 
   return (
     <View style={styles.container}>
+      <Tabs.Screen
+        options={
+          selectedBusiness
+            ? { tabBarStyle: { display: 'none' } }
+            : {
+                tabBarStyle: {
+                  borderTopWidth: 1,
+                  borderTopColor: colors.border,
+                  paddingBottom: 4,
+                  height: 60,
+                },
+              }
+        }
+      />
       {/* MAP - full screen behind overlays */}
       <View style={StyleSheet.absoluteFill}>
         <CustomMap
@@ -216,8 +238,8 @@ export default function MapScreen() {
 
         {/* Search bar row - full width */}
         <View style={styles.searchRow}>
-          <View style={[styles.searchBox, !user && { marginRight: 60 }]}>
-            <Ionicons name="search" size={18} color={colors.primary} />
+          <View style={[styles.searchBox, isSearchFocused && styles.searchBoxFocused, !user && { marginRight: 60 }]}>
+            <Ionicons name={selectedCategory ? getCategoryIconName(selectedCategory) : 'search'} size={18} color={colors.primary} />
             <TextInput
               placeholder="Buscar negocios en La Esperanza..."
               placeholderTextColor={colors.textMuted}
@@ -225,6 +247,8 @@ export default function MapScreen() {
               value={searchQuery}
               onChangeText={setSearchQuery}
               returnKeyType="search"
+              onFocus={() => setIsSearchFocused(true)}
+              onBlur={() => setIsSearchFocused(false)}
             />
             {searchQuery.length > 0 && (
               <Pressable onPress={() => setSearchQuery('')}>
@@ -270,6 +294,7 @@ export default function MapScreen() {
                   style={[styles.chip, isActive && styles.chipActive]}
                   onPress={() => handleCategorySelect(isActive ? null : cat.name)}
                 >
+                  <Ionicons name={getCategoryIconName(cat.name)} size={13} color={isActive ? '#fff' : colors.primary} />
                   <Typography variant="caption" style={[styles.chipText, isActive && styles.chipTextActive]}>
                     {cat.name}
                   </Typography>
@@ -309,7 +334,10 @@ export default function MapScreen() {
 
       {/* ── BOTTOM OVERLAY: Selected business card ── */}
       {selectedBusiness && (
-        <View style={styles.bottomSheet} pointerEvents="box-none">
+        <View
+          style={[styles.bottomSheet, { bottom: insets.bottom + spacing.s }]}
+          pointerEvents="box-none"
+        >
           <View style={styles.selectedCard}>
             {/* Header: status + distance + close */}
             <View style={styles.cardHeader}>
@@ -549,6 +577,43 @@ export default function MapScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        visible={isLogoutConfirmVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => (isLoggingOut ? null : setIsLogoutConfirmVisible(false))}
+      >
+        <View style={styles.dialogOverlay}>
+          <View style={styles.dialogCard}>
+            <View style={styles.dialogHeader}>
+              <Typography variant="h2" style={{ fontWeight: 'bold' }}>
+                Cerrar sesión
+              </Typography>
+            </View>
+            <View style={styles.dialogBody}>
+              <Typography variant="body1" style={{ textAlign: 'center' }}>
+                ¿Estás seguro de que deseas cerrar sesión?
+              </Typography>
+            </View>
+            <View style={styles.dialogActions}>
+              <Button
+                title="Cancelar"
+                variant="outline"
+                onPress={() => setIsLogoutConfirmVisible(false)}
+                disabled={isLoggingOut}
+                style={{ flex: 1 }}
+              />
+              <Button
+                title="Cerrar sesión"
+                onPress={confirmLogout}
+                isLoading={isLoggingOut}
+                style={{ flex: 1, backgroundColor: colors.error }}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -578,15 +643,31 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderRadius: radius.round,
     paddingHorizontal: spacing.m,
-    paddingVertical: Platform.OS === 'ios' ? spacing.s : spacing.xs,
+    paddingVertical: Platform.OS === 'ios' ? spacing.m : spacing.s,
+    minHeight: 50,
     ...shadows.floating,
     gap: spacing.s,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  searchBoxFocused: {
+    borderColor: colors.primary,
+    ...(Platform.OS === 'web'
+      ? ({ boxShadow: `0 0 0 3px ${colors.primary}33` } as any)
+      : {}),
   },
   searchInput: {
     flex: 1,
     fontSize: 14,
     color: colors.text,
     paddingVertical: 0,
+    ...(Platform.OS === 'web'
+      ? ({
+          outlineStyle: 'none',
+          outlineWidth: 0,
+          boxShadow: 'none',
+        } as any)
+      : {}),
   },
   profileBtn: {
     backgroundColor: colors.surface,
@@ -596,7 +677,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     width: 46,
-    height: 46,
+    height: 50,
   },
   chip: {
     flexDirection: 'row',
@@ -829,5 +910,36 @@ const styles = StyleSheet.create({
     borderColor: colors.error,
     backgroundColor: 'transparent',
     marginTop: spacing.s,
+  },
+  dialogOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.l,
+  },
+  dialogCard: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    overflow: 'hidden',
+    ...shadows.floating,
+  },
+  dialogHeader: {
+    paddingHorizontal: spacing.l,
+    paddingTop: spacing.l,
+    paddingBottom: spacing.s,
+    alignItems: 'center',
+  },
+  dialogBody: {
+    paddingHorizontal: spacing.l,
+    paddingBottom: spacing.l,
+  },
+  dialogActions: {
+    flexDirection: 'row',
+    gap: spacing.s,
+    paddingHorizontal: spacing.l,
+    paddingBottom: spacing.l,
   },
 });

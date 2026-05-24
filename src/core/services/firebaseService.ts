@@ -93,7 +93,7 @@ export const getBusinesses = async (userLat?: number, userLon?: number): Promise
       return b;
     });
     
-    if (userLat && userLon) {
+    if (userLat !== undefined && userLon !== undefined) {
       return businesses.map(b => ({
         ...b,
         distance: getDistanceFromLatLonInKm(userLat, userLon, b.location.latitude, b.location.longitude)
@@ -103,6 +103,37 @@ export const getBusinesses = async (userLat?: number, userLon?: number): Promise
     return businesses;
   } catch (error) {
     console.error('Error fetching businesses:', error);
+    return [];
+  }
+};
+
+export const getBusinessesByCategory = async (
+  category: string,
+  userLat?: number,
+  userLon?: number
+): Promise<(Business & { distance?: number })[]> => {
+  try {
+    const q = query(businessCollection, where('category', '==', category));
+    const snapshot = await getDocs(q);
+    let businesses = snapshot.docs.map(doc => {
+      const data = doc.data() as Business;
+      const b = { id: doc.id, ...data };
+      b.isOpen = isBusinessOpen(b);
+      return b;
+    });
+
+    if (userLat !== undefined && userLon !== undefined) {
+      return businesses
+        .map(b => ({
+          ...b,
+          distance: getDistanceFromLatLonInKm(userLat, userLon, b.location.latitude, b.location.longitude),
+        }))
+        .sort((a, b) => (a.distance || 0) - (b.distance || 0));
+    }
+
+    return businesses;
+  } catch (error) {
+    console.error('Error fetching businesses by category:', error);
     return [];
   }
 };
@@ -426,4 +457,3 @@ export const getOrdersByClientId = async (clientId: string): Promise<Order[]> =>
     }
   }
 };
-

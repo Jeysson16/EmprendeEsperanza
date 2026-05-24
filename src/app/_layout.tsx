@@ -21,7 +21,7 @@ function RootLayoutContent() {
 
     if (!user) {
       // Redirigir a bienvenida si el usuario no logueado intenta entrar al dashboard del emprendedor
-      if (inEmprendedorGroup) {
+      if (inEmprendedorGroup || inTabsGroup) {
         router.replace('/');
       }
     } else {
@@ -68,4 +68,3 @@ export default function RootLayout() {
     </AuthProvider>
   );
 }
-

@@ -1,19 +1,29 @@
-import React, { useEffect, useState, useMemo } from 'react';
-import {
-  View, StyleSheet, ScrollView, Image, Platform, ActivityIndicator, Pressable, TextInput, Animated, ImageBackground
-} from 'react-native';
-import { useRouter } from 'expo-router';
-import { Typography } from '@/shared/components/Typography';
+import { Business, Category, getBusinessesByCategory, getCategories } from '@/core/services/firebaseService';
+import { colors, layout, radius, shadows, spacing } from '@/core/theme';
 import { Card } from '@/shared/components/Card';
-import { colors, spacing, radius, layout, shadows } from '@/core/theme';
+import { Typography } from '@/shared/components/Typography';
 import { Ionicons } from '@expo/vector-icons';
-import { getCategories, getBusinesses, Category, Business } from '@/core/services/firebaseService';
 import * as Location from 'expo-location';
+import { useRouter } from 'expo-router';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Animated,
+  Image,
+  ImageBackground,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  useWindowDimensions,
+  View
+} from 'react-native';
 
 // ─── Skeleton for category card ────────────────────────────────────────────
-function CategorySkeleton() {
+function CategorySkeleton({ style }: { style?: any }) {
   return (
-    <View style={[styles.cardContainer, { backgroundColor: '#E5E7EB' }]}>
+    <View style={[styles.cardContainerBase, style, { backgroundColor: '#E5E7EB' }]}>
       <View style={{ flex: 1, backgroundColor: '#D1D5DB', borderRadius: radius.xl }} />
     </View>
   );
@@ -21,8 +31,8 @@ function CategorySkeleton() {
 
 // ─── Category card with image preload ──────────────────────────────────────
 function CategoryCard({
-  cat, isSelected, onPress
-}: { cat: Category; isSelected: boolean; onPress: () => void }) {
+  cat, isSelected, onPress, style
+}: { cat: Category; isSelected: boolean; onPress: () => void; style?: any }) {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
 
@@ -30,7 +40,8 @@ function CategoryCard({
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [
-        styles.cardContainer,
+        styles.cardContainerBase,
+        style,
         isSelected && styles.cardSelected,
         pressed && { opacity: 0.88, transform: [{ scale: 0.97 }] }
       ]}
@@ -163,6 +174,8 @@ const bizStyles = StyleSheet.create({
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 export default function ExploraScreen() {
   const router = useRouter();
+  const scrollRef = useRef<ScrollView | null>(null);
+  const { width: windowWidth } = useWindowDimensions();
   const [categories, setCategories] = useState<Category[]>([]);
   const [businesses, setBusinesses] = useState<(Business & { distance?: number })[]>([]);
   const [loadingCats, setLoadingCats] = useState(true);
@@ -218,15 +231,35 @@ export default function ExploraScreen() {
       setBusinesses([]);
       return;
     }
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
     setSelectedCategory(cat);
     setLoadingBiz(true);
     try {
-      const data = await getBusinesses(location?.latitude, location?.longitude);
-      setBusinesses(data.filter(b => b.category === cat.name));
+      const data = await getBusinessesByCategory(cat.name, location?.latitude, location?.longitude);
+      setBusinesses(data);
     } finally {
       setLoadingBiz(false);
     }
   };
+
+  const gridColumns = useMemo(() => {
+    if (windowWidth >= 900) return 5;
+    if (windowWidth >= 700) return 4;
+    if (windowWidth >= 520) return 3;
+    return 2;
+  }, [windowWidth]);
+
+  const categoryCardStyle = useMemo(() => {
+    const gap = spacing.m;
+    const horizontalPadding = spacing.l;
+    const available = Math.max(0, windowWidth - horizontalPadding * 2 - gap * (gridColumns - 1));
+    const size = Math.floor(available / gridColumns);
+    return {
+      width: size,
+      aspectRatio: 1,
+      borderRadius: radius.xl,
+    };
+  }, [gridColumns, windowWidth]);
 
   const filteredBusinesses = useMemo(() => {
     if (!searchQuery) return businesses;
@@ -234,8 +267,9 @@ export default function ExploraScreen() {
   }, [businesses, searchQuery]);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scroll}>
-      <View style={layout.getContainerStyle()}>
+    <View style={styles.screen}>
+      <ScrollView ref={scrollRef} style={styles.container} contentContainerStyle={styles.scroll}>
+        <View style={layout.getContainerStyle()}>
 
         {/* Header */}
         <View style={styles.headerWrap}>
@@ -279,7 +313,9 @@ export default function ExploraScreen() {
 
             {loadingCats ? (
               <View style={styles.grid}>
-                {[1, 2, 3, 4].map(i => <CategorySkeleton key={i} />)}
+                {[1, 2, 3, 4, 5, 6].map(i => (
+                  <CategorySkeleton key={i} style={categoryCardStyle} />
+                ))}
               </View>
             ) : categories.length === 0 ? (
               <View style={styles.emptyCategories}>
@@ -296,6 +332,7 @@ export default function ExploraScreen() {
                     cat={cat}
                     isSelected={false}
                     onPress={() => handleCategorySelect(cat)}
+                    style={categoryCardStyle}
                   />
                 ))}
               </View>
@@ -315,6 +352,7 @@ export default function ExploraScreen() {
                   <Pressable 
                     style={styles.categoryBackBtn} 
                     onPress={() => {
+                      scrollRef.current?.scrollTo({ y: 0, animated: false });
                       setSelectedCategory(null);
                       setBusinesses([]);
                     }}
@@ -337,9 +375,7 @@ export default function ExploraScreen() {
                 </Typography>
               </View>
 
-              {loadingBiz ? (
-                <ActivityIndicator size="large" color={colors.primary} style={{ marginVertical: spacing.xl }} />
-              ) : filteredBusinesses.length === 0 ? (
+              {filteredBusinesses.length === 0 ? (
                 <Card style={styles.emptyCard}>
                   <Ionicons name="storefront-outline" size={48} color={colors.textMuted} />
                   <Typography variant="body1" color={colors.textMuted} style={{ marginTop: spacing.m, textAlign: 'center' }}>
@@ -358,12 +394,25 @@ export default function ExploraScreen() {
             </View>
           </Animated.View>
         )}
-      </View>
-    </ScrollView>
+        </View>
+      </ScrollView>
+
+      {loadingBiz && (
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingCard}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Typography variant="body2" style={{ marginTop: spacing.m }}>
+              Cargando comercios...
+            </Typography>
+          </View>
+        </View>
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.background },
   container: { flex: 1, backgroundColor: colors.background },
   scroll: {
     padding: spacing.l,
@@ -424,13 +473,11 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     marginBottom: spacing.l,
+    gap: spacing.m,
   },
-  cardContainer: {
-    width: '48%',
-    aspectRatio: 1,
-    marginBottom: spacing.m,
+  cardContainerBase: {
     borderRadius: radius.xl,
     overflow: 'hidden',
     ...shadows.medium,
@@ -527,5 +574,21 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.surface,
     borderRadius: radius.xl,
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(17, 24, 39, 0.35)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.l,
+  },
+  loadingCard: {
+    width: '100%',
+    maxWidth: 320,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: spacing.xl,
+    alignItems: 'center',
+    ...shadows.soft,
   },
 });

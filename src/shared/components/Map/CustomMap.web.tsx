@@ -46,8 +46,8 @@ const leafletHtml = `
       height: 70px;
     }
     .marker-pin {
-      width: 32px;
-      height: 32px;
+      width: 36px;
+      height: 36px;
       border-radius: 50%;
       border: 2px solid white;
       box-shadow: 0 3px 8px rgba(0,0,0,0.2);
@@ -57,8 +57,8 @@ const leafletHtml = `
       color: white;
     }
     .marker-pin svg {
-      width: 14px;
-      height: 14px;
+      width: 16px;
+      height: 16px;
     }
     .marker-tail {
       width: 0;
@@ -120,6 +120,7 @@ const leafletHtml = `
     }).addTo(map);
 
     L.control.zoom({ position: 'topright' }).addTo(map);
+    map.setView([-8.0777, -79.0354], 14);
 
     var markers = {};
     var userMarker = null;
@@ -127,12 +128,10 @@ const leafletHtml = `
     function getCategoryIconSvg(category) {
       var cat = (category || '').toLowerCase();
       if (cat.includes('carniceria') || cat.includes('carnicería') || cat.includes('carne')) {
-        // Cleaver / butcher knife SVG
-        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="14" y="3" width="3" height="8" rx="1"></rect><path d="M14 9H8a3 3 0 0 0-3 3v6h9V9z"></path></svg>';
+        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14c0 4 3 7 7 7 5 0 9-4 9-9 0-5-4-9-9-9-4 0-7 3-7 7 0 1 .2 2 .6 3z"></path><path d="M10 10c0 2 1.5 3.5 3.5 3.5S17 12 17 10 15.5 6.5 13.5 6.5 10 8 10 10z"></path></svg>';
       }
       if (cat.includes('panaderia') || cat.includes('panadería') || cat.includes('pan')) {
-        // Bread loaf SVG
-        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v5H3v-5z"></path><path d="M6 13v-1M10 13v-2M14 13v-2M18 13v-1"></path></svg>';
+        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 9c0-2.2 2.2-4 5-4s5 1.8 5 4v10H7V9z"></path><path d="M9 12v-1"></path><path d="M12 12v-2"></path><path d="M15 12v-1"></path></svg>';
       }
       if (cat.includes('bodega') || cat.includes('tienda') || cat.includes('comercio')) {
         // Shopping bag SVG
