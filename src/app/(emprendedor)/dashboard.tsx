@@ -47,6 +47,7 @@ export default function MaintainerDashboard() {
   const [phone, setPhone] = useState('');
   const [description, setDescription] = useState('');
   const [imageUrl, setImageUrl] = useState('');
+  const [galleryImages, setGalleryImages] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
 
   // Horario de atención
@@ -109,6 +110,7 @@ export default function MaintainerDashboard() {
         setPhone(b.phone || '');
         setDescription(b.description || '');
         setImageUrl(b.imageUrl || '');
+        setGalleryImages(b.images || []);
         setOpenHour(b.openingHours?.open || '08:00');
         setCloseHour(b.openingHours?.close || '20:00');
         setLocLat(b.location?.latitude?.toString() || '');
@@ -197,6 +199,7 @@ export default function MaintainerDashboard() {
         phone,
         description,
         imageUrl: imageUrl || 'https://images.unsplash.com/photo-1473169643883-f8ed53bc87e9?auto=format&fit=crop&q=80&w=600',
+        images: galleryImages,
         isOpen: false, // will be computed dynamically
         openingHours: { open: openHour, close: closeHour },
         ownerId: user.uid,
@@ -514,6 +517,53 @@ export default function MaintainerDashboard() {
                   />
                 )}
               </View>
+
+              {/* Galería de Fotos del Local */}
+              <Typography variant="body2" style={{ marginBottom: spacing.xs, fontWeight: 'bold', marginTop: spacing.s }}>
+                Galería de Fotos del Local
+              </Typography>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                style={styles.galleryScrollView}
+                contentContainerStyle={styles.galleryContent}
+              >
+                {galleryImages.map((img, idx) => (
+                  <View key={img + idx} style={styles.galleryThumbContainer}>
+                    <Image source={{ uri: img }} style={styles.galleryThumb} />
+                    <Pressable 
+                      style={styles.galleryThumbDelete}
+                      onPress={() => {
+                        setGalleryImages(prev => prev.filter((_, i) => i !== idx));
+                      }}
+                    >
+                      <Ionicons name="close-circle" size={20} color={colors.error} />
+                    </Pressable>
+                  </View>
+                ))}
+                
+                {uploadingImage ? (
+                  <View style={[styles.galleryThumbPlaceholder, { justifyContent: 'center' }]}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  </View>
+                ) : (
+                  <Pressable 
+                    style={styles.galleryThumbPlaceholder}
+                    onPress={() => {
+                      const timestamp = Date.now();
+                      handleSelectAndUploadImage(
+                        `businesses/${user?.uid || 'unknown'}/gallery_${timestamp}.jpg`, 
+                        (url) => setGalleryImages(prev => [...prev, url])
+                      );
+                    }}
+                  >
+                    <Ionicons name="add" size={28} color={colors.primary} />
+                    <Typography variant="caption" color={colors.primary} style={{ fontWeight: '600' }}>
+                      Añadir
+                    </Typography>
+                  </Pressable>
+                )}
+              </ScrollView>
 
               <Input 
                 label="Descripción Corta del Negocio"
@@ -988,9 +1038,9 @@ export default function MaintainerDashboard() {
       <Modal visible={isMapPickerVisible} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { maxWidth: 600, height: '80%' }]}>
-            <View style={styles.modalHeader}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.l, borderBottomWidth: 1, borderBottomColor: colors.border, paddingBottom: spacing.s }}>
               <Typography variant="h2" style={{ fontWeight: 'bold' }}>Ubica tu Negocio</Typography>
-              <Pressable onPress={() => setIsMapPickerVisible(false)} style={styles.modalCloseBtn}>
+              <Pressable onPress={() => setIsMapPickerVisible(false)} style={{ padding: spacing.xs }}>
                 <Ionicons name="close" size={24} color={colors.text} />
               </Pressable>
             </View>
@@ -1253,5 +1303,47 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     padding: spacing.m,
     paddingTop: 0,
+  },
+  galleryScrollView: {
+    marginBottom: spacing.m,
+  },
+  galleryContent: {
+    gap: spacing.s,
+    paddingVertical: 4,
+  },
+  galleryThumbContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: radius.m,
+    position: 'relative',
+    marginRight: spacing.s,
+  },
+  galleryThumb: {
+    width: 80,
+    height: 80,
+    borderRadius: radius.m,
+  },
+  galleryThumbDelete: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: 'white',
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1,
+    elevation: 2,
+  },
+  galleryThumbPlaceholder: {
+    width: 80,
+    height: 80,
+    borderRadius: radius.m,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: colors.primary,
+    backgroundColor: colors.primary + '05',
+    alignItems: 'center',
+    justifyContent: 'center',
   }
 });

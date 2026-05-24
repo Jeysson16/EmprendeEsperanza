@@ -124,6 +124,32 @@ const leafletHtml = `
     var markers = {};
     var userMarker = null;
 
+    function getCategoryIconSvg(category) {
+      var cat = (category || '').toLowerCase();
+      if (cat.includes('carniceria') || cat.includes('carnicería') || cat.includes('carne')) {
+        // Cleaver / butcher knife SVG
+        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="14" y="3" width="3" height="8" rx="1"></rect><path d="M14 9H8a3 3 0 0 0-3 3v6h9V9z"></path></svg>';
+      }
+      if (cat.includes('panaderia') || cat.includes('panadería') || cat.includes('pan')) {
+        // Bread loaf SVG
+        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v5H3v-5z"></path><path d="M6 13v-1M10 13v-2M14 13v-2M18 13v-1"></path></svg>';
+      }
+      if (cat.includes('bodega') || cat.includes('tienda') || cat.includes('comercio')) {
+        // Shopping bag SVG
+        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4H6z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>';
+      }
+      if (cat.includes('restaurant') || cat.includes('restaurante') || cat.includes('comida')) {
+        // Utensils SVG
+        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2M7 2v4M21 15V2v0a5 5 0 0 0-5 5v8c0 1.1.9 2 2 2h3zM12 22V11M18 22V17"></path></svg>';
+      }
+      if (cat.includes('farmacia') || cat.includes('botica') || cat.includes('salud')) {
+        // Medical cross SVG
+        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 10.5h-5.5V5h-3v5.5H5v3h5.5V19h3v-5.5H19v-3z"></path></svg>';
+      }
+      // Default: storefront/house
+      return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>';
+    }
+
     function updateMap(data) {
       var center = data.center;
       var zoom = data.zoom;
@@ -171,10 +197,7 @@ const leafletHtml = `
         
         var iconHtml = '<div class="marker-pin-container">' +
           '<div class="marker-pin" style="background-color: ' + color + ';">' +
-            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-              '<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>' +
-              '<polyline points="9 22 9 12 15 12 15 22"></polyline>' +
-            '</svg>' +
+            getCategoryIconSvg(b.category) +
           '</div>' +
           '<div class="marker-tail" style="border-top-color: ' + color + ';"></div>' +
           '<div class="marker-label">' + b.name + '</div>' +

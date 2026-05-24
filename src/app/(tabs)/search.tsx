@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import {
-  View, StyleSheet, ScrollView, Image, Platform, ActivityIndicator, Pressable, TextInput
+  View, StyleSheet, ScrollView, Image, Platform, ActivityIndicator, Pressable, TextInput, Animated, ImageBackground
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Typography } from '@/shared/components/Typography';
+import { Card } from '@/shared/components/Card';
 import { colors, spacing, radius, layout, shadows } from '@/core/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { getCategories, getBusinesses, Category, Business } from '@/core/services/firebaseService';
@@ -170,6 +171,31 @@ export default function ExploraScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
 
+  // Animaciones
+  const [fadeAnim] = useState(() => new Animated.Value(0));
+  const [scaleAnim] = useState(() => new Animated.Value(0.95));
+
+  const triggerTransition = () => {
+    fadeAnim.setValue(0);
+    scaleAnim.setValue(0.95);
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 250,
+        useNativeDriver: Platform.OS !== 'web',
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 250,
+        useNativeDriver: Platform.OS !== 'web',
+      }),
+    ]).start();
+  };
+
+  useEffect(() => {
+    triggerTransition();
+  }, [selectedCategory]);
+
   useEffect(() => {
     (async () => {
       const cats = await getCategories();
@@ -244,76 +270,93 @@ export default function ExploraScreen() {
           )}
         </View>
 
-        {/* Categories section title */}
-        <View style={styles.sectionHeader}>
-          <Typography variant="h3" style={styles.sectionTitle}>Categorías</Typography>
-          {selectedCategory && (
-            <Pressable
-              style={styles.clearBtn}
-              onPress={() => { setSelectedCategory(null); setBusinesses([]); }}
-            >
-              <Typography variant="caption" color={colors.primary}>Limpiar filtro</Typography>
-              <Ionicons name="close" size={14} color={colors.primary} />
-            </Pressable>
-          )}
-        </View>
-
-        {/* Category grid */}
-        {loadingCats ? (
-          <View style={styles.grid}>
-            {[1, 2, 3, 4].map(i => <CategorySkeleton key={i} />)}
-          </View>
-        ) : categories.length === 0 ? (
-          <View style={styles.emptyCategories}>
-            <Ionicons name="grid-outline" size={40} color={colors.textMuted} />
-            <Typography variant="body2" color={colors.textMuted} style={{ marginTop: spacing.s, textAlign: 'center' }}>
-              No hay categorías. El administrador debe crear algunas.
-            </Typography>
-          </View>
-        ) : (
-          <View style={styles.grid}>
-            {categories.map(cat => (
-              <CategoryCard
-                key={cat.id || cat.name}
-                cat={cat}
-                isSelected={selectedCategory?.id === cat.id}
-                onPress={() => handleCategorySelect(cat)}
-              />
-            ))}
-          </View>
-        )}
-
-        {/* Business results */}
-        {selectedCategory && (
-          <View style={styles.resultsSection}>
+        {!selectedCategory ? (
+          /* GRID DE CATEGORÍAS ANIMADO */
+          <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: scaleAnim }] }}>
             <View style={styles.sectionHeader}>
-              <Typography variant="h3" style={styles.sectionTitle}>
-                {selectedCategory.name}
-              </Typography>
-              <Typography variant="caption" color={colors.textMuted}>
-                {filteredBusinesses.length} resultado{filteredBusinesses.length !== 1 ? 's' : ''}
-              </Typography>
+              <Typography variant="h3" style={styles.sectionTitle}>Categorías</Typography>
             </View>
 
-            {loadingBiz ? (
-              <ActivityIndicator size="large" color={colors.primary} style={{ marginVertical: spacing.xl }} />
-            ) : filteredBusinesses.length === 0 ? (
-              <View style={styles.emptyResults}>
-                <Ionicons name="storefront-outline" size={40} color={colors.textMuted} />
-                <Typography variant="body1" color={colors.textMuted} style={{ marginTop: spacing.m, textAlign: 'center' }}>
-                  No hay comercios registrados en "{selectedCategory.name}"
+            {loadingCats ? (
+              <View style={styles.grid}>
+                {[1, 2, 3, 4].map(i => <CategorySkeleton key={i} />)}
+              </View>
+            ) : categories.length === 0 ? (
+              <View style={styles.emptyCategories}>
+                <Ionicons name="grid-outline" size={40} color={colors.textMuted} />
+                <Typography variant="body2" color={colors.textMuted} style={{ marginTop: spacing.s, textAlign: 'center' }}>
+                  No hay categorías. El administrador debe crear algunas.
                 </Typography>
               </View>
             ) : (
-              filteredBusinesses.map(b => (
-                <BusinessResultCard
-                  key={b.id || b.name}
-                  business={b}
-                  onPress={() => router.push(`/negocio/${b.id}`)}
-                />
-              ))
+              <View style={styles.grid}>
+                {categories.map(cat => (
+                  <CategoryCard
+                    key={cat.id || cat.name}
+                    cat={cat}
+                    isSelected={false}
+                    onPress={() => handleCategorySelect(cat)}
+                  />
+                ))}
+              </View>
             )}
-          </View>
+          </Animated.View>
+        ) : (
+          /* RESULTADOS DE LA CATEGORÍA ANIMADOS */
+          <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: scaleAnim }] }}>
+            {/* Cabecera elegante de Categoría Seleccionada */}
+            <View style={styles.selectedCategoryHeader}>
+              <ImageBackground
+                source={{ uri: selectedCategory.imageUrl || 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=800' }}
+                style={styles.categoryHeaderBg}
+                imageStyle={{ borderRadius: radius.l }}
+              >
+                <View style={styles.categoryHeaderOverlay}>
+                  <Pressable 
+                    style={styles.categoryBackBtn} 
+                    onPress={() => {
+                      setSelectedCategory(null);
+                      setBusinesses([]);
+                    }}
+                  >
+                    <Ionicons name="arrow-back" size={22} color={colors.text} />
+                  </Pressable>
+                  <Typography variant="h2" color="#fff" style={styles.categoryHeaderTitle}>
+                    {selectedCategory.name.toUpperCase()}
+                  </Typography>
+                </View>
+              </ImageBackground>
+            </View>
+
+            {/* Listado de Negocios */}
+            <View style={styles.resultsSection}>
+              <View style={[styles.sectionHeader, { marginTop: spacing.s }]}>
+                <Typography variant="h3" style={styles.sectionTitle}>Comercios Asociados</Typography>
+                <Typography variant="caption" color={colors.textMuted}>
+                  {filteredBusinesses.length} resultado{filteredBusinesses.length !== 1 ? 's' : ''}
+                </Typography>
+              </View>
+
+              {loadingBiz ? (
+                <ActivityIndicator size="large" color={colors.primary} style={{ marginVertical: spacing.xl }} />
+              ) : filteredBusinesses.length === 0 ? (
+                <Card style={styles.emptyCard}>
+                  <Ionicons name="storefront-outline" size={48} color={colors.textMuted} />
+                  <Typography variant="body1" color={colors.textMuted} style={{ marginTop: spacing.m, textAlign: 'center' }}>
+                    No hay comercios registrados en esta categoría aún.
+                  </Typography>
+                </Card>
+              ) : (
+                filteredBusinesses.map((biz) => (
+                  <BusinessResultCard
+                    key={biz.id || biz.name}
+                    business={biz}
+                    onPress={() => router.push(`/negocio/${biz.id}`)}
+                  />
+                ))
+              )}
+            </View>
+          </Animated.View>
         )}
       </View>
     </ScrollView>
@@ -444,5 +487,45 @@ const styles = StyleSheet.create({
   emptyResults: {
     alignItems: 'center',
     paddingVertical: spacing.xxl,
+  },
+  selectedCategoryHeader: {
+    height: 120,
+    marginBottom: spacing.m,
+  },
+  categoryHeaderBg: {
+    width: '100%',
+    height: '100%',
+  },
+  categoryHeaderOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(17, 24, 39, 0.45)',
+    borderRadius: radius.l,
+    padding: spacing.m,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  categoryBackBtn: {
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: radius.round,
+    padding: spacing.s,
+    marginRight: spacing.m,
+  },
+  categoryHeaderTitle: {
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  emptyCard: {
+    padding: spacing.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: spacing.l,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
   },
 });

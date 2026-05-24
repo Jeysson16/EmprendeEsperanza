@@ -26,6 +26,7 @@ export interface Business {
   isOpen: boolean;           // computed at runtime from openingHours
   openingHours?: { open: string; close: string }; // e.g. "09:00" / "18:00"
   imageUrl?: string;
+  images?: string[];         // gallery of local images
   ownerId?: string;
   products?: Product[];
   distance?: number;

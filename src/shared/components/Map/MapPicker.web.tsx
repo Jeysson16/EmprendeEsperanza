@@ -201,7 +201,7 @@ export const MapPicker: React.FC<MapPickerProps> = ({
         width="100%"
         height="100%"
         style={{ border: 0, display: 'block' }}
-        srcdoc={leafletPickerHtml}
+        srcDoc={leafletPickerHtml}
       />
       {!mapLoaded && (
         <View style={styles.loadingOverlay}>

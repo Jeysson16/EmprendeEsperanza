@@ -96,14 +96,10 @@ export default function MapScreen() {
   };
 
   const handleProfilePress = () => {
-    if (!user) {
-      router.push('/(auth)/login');
-    } else {
-      setEditName(userProfile?.displayName || '');
-      setProfileError(null);
-      setProfileSuccess(false);
-      setIsProfileModalVisible(true);
-    }
+    setEditName(userProfile?.displayName || '');
+    setProfileError(null);
+    setProfileSuccess(false);
+    setIsProfileModalVisible(true);
   };
 
   const handleSaveProfile = async () => {
@@ -315,9 +311,6 @@ export default function MapScreen() {
       {selectedBusiness && (
         <View style={styles.bottomSheet} pointerEvents="box-none">
           <View style={styles.selectedCard}>
-            {/* Handle bar */}
-            <View style={styles.handleBar} />
-
             {/* Header: status + distance + close */}
             <View style={styles.cardHeader}>
               <View style={[styles.openBadge, { backgroundColor: selectedBusiness.isOpen ? '#DCFCE7' : '#F3F4F6' }]}>
@@ -422,7 +415,9 @@ export default function MapScreen() {
           <View style={styles.modalContent}>
             {/* Cabecera */}
             <View style={styles.modalHeader}>
-              <Typography variant="h2" style={{ fontWeight: 'bold' }}>Mi Perfil</Typography>
+              <Typography variant="h2" style={{ fontWeight: 'bold' }}>
+                {user ? 'Mi Perfil' : 'Navegación'}
+              </Typography>
               <Pressable 
                 onPress={() => setIsProfileModalVisible(false)}
                 style={styles.modalCloseBtn}
@@ -432,87 +427,124 @@ export default function MapScreen() {
             </View>
 
             <ScrollView contentContainerStyle={styles.modalForm}>
-              {profileError && (
-                <View style={styles.errorBanner}>
-                  <Ionicons name="alert-circle" size={20} color={colors.error} />
-                  <Typography variant="body2" color={colors.error} style={{ marginLeft: spacing.xs, flex: 1 }}>
-                    {profileError}
-                  </Typography>
+              {!user ? (
+                // Vista para Invitado
+                <View style={{ gap: spacing.m, alignItems: 'stretch', width: '100%' }}>
+                  <View style={{ alignItems: 'center', marginVertical: spacing.s, gap: spacing.xs }}>
+                    <Ionicons name="person-circle" size={64} color={colors.textMuted} />
+                    <Typography variant="body1" style={{ textAlign: 'center', fontWeight: 'bold', color: colors.text }}>
+                      Navegando como Invitado
+                    </Typography>
+                    <Typography variant="body2" color={colors.textMuted} style={{ textAlign: 'center', marginTop: spacing.s }}>
+                      Inicia sesión para realizar pedidos, guardar tus comercios favoritos y gestionar tu perfil.
+                    </Typography>
+                  </View>
+
+                  <Button
+                    title="Iniciar Sesión"
+                    onPress={() => {
+                      setIsProfileModalVisible(false);
+                      router.push('/(auth)/login');
+                    }}
+                    style={{ marginTop: spacing.m }}
+                  />
+
+                  <Button
+                    title="Registrarse"
+                    variant="outline"
+                    onPress={() => {
+                      setIsProfileModalVisible(false);
+                      router.push('/(auth)/register');
+                    }}
+                    style={{ marginTop: spacing.s }}
+                  />
                 </View>
+              ) : (
+                // Vista para Usuario Autenticado
+                <>
+                  {profileError && (
+                    <View style={styles.errorBanner}>
+                      <Ionicons name="alert-circle" size={20} color={colors.error} />
+                      <Typography variant="body2" color={colors.error} style={{ marginLeft: spacing.xs, flex: 1 }}>
+                        {profileError}
+                      </Typography>
+                    </View>
+                  )}
+
+                  {profileSuccess && (
+                    <View style={styles.successBanner}>
+                      <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+                      <Typography variant="body2" color={colors.success} style={{ marginLeft: spacing.xs, flex: 1 }}>
+                        ¡Perfil actualizado correctamente!
+                      </Typography>
+                    </View>
+                  )}
+
+                  {/* Nombre (Editable) */}
+                  <Input
+                    label="Nombre Completo"
+                    placeholder="Ingresa tu nombre"
+                    value={editName}
+                    onChangeText={setEditName}
+                    editable={!updatingProfile}
+                  />
+
+                  {/* Correo (Lectura) */}
+                  <View style={styles.readOnlyContainer}>
+                    <Typography variant="body2" style={styles.readOnlyLabel}>Correo Electrónico</Typography>
+                    <View style={styles.readOnlyInput}>
+                      <Typography variant="body1" color={colors.textMuted}>{user?.email || ''}</Typography>
+                    </View>
+                  </View>
+
+                  {/* Rol (Lectura) */}
+                  <View style={styles.readOnlyContainer}>
+                    <Typography variant="body2" style={styles.readOnlyLabel}>Tipo de Cuenta</Typography>
+                    <View style={styles.readOnlyInput}>
+                      <Typography variant="body1" color={colors.textMuted}>
+                        {userProfile?.role === 'emprendedor' ? 'Emprendedor' : 'Cliente'}
+                      </Typography>
+                    </View>
+                  </View>
+
+                  {/* Botón de Guardar */}
+                  <Button
+                    title="Guardar Cambios"
+                    onPress={handleSaveProfile}
+                    isLoading={updatingProfile}
+                    style={{ marginTop: spacing.m }}
+                  />
+
+                  {/* Botón Panel de Control (Si es Emprendedor) */}
+                  {userProfile?.role === 'emprendedor' && (
+                    <Button
+                      title="Panel de Control"
+                      variant="outline"
+                      onPress={() => {
+                        setIsProfileModalVisible(false);
+                        router.push('/(emprendedor)/dashboard');
+                      }}
+                      style={{ marginTop: spacing.s }}
+                    />
+                  )}
+
+                  {/* Divisor */}
+                  <View style={styles.modalDivider} />
+
+                  {/* Botón de Cerrar Sesión */}
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.logoutBtn,
+                      pressed && { opacity: 0.8 }
+                    ]}
+                    onPress={handleLogout}
+                  >
+                    <Typography variant="body1" style={{ color: colors.error, fontWeight: '600' }}>
+                      Cerrar Sesión
+                    </Typography>
+                  </Pressable>
+                </>
               )}
-
-              {profileSuccess && (
-                <View style={styles.successBanner}>
-                  <Ionicons name="checkmark-circle" size={20} color={colors.success} />
-                  <Typography variant="body2" color={colors.success} style={{ marginLeft: spacing.xs, flex: 1 }}>
-                    ¡Perfil actualizado correctamente!
-                  </Typography>
-                </View>
-              )}
-
-              {/* Nombre (Editable) */}
-              <Input
-                label="Nombre Completo"
-                placeholder="Ingresa tu nombre"
-                value={editName}
-                onChangeText={setEditName}
-                editable={!updatingProfile}
-              />
-
-              {/* Correo (Lectura) */}
-              <View style={styles.readOnlyContainer}>
-                <Typography variant="body2" style={styles.readOnlyLabel}>Correo Electrónico</Typography>
-                <View style={styles.readOnlyInput}>
-                  <Typography variant="body1" color={colors.textMuted}>{user?.email || ''}</Typography>
-                </View>
-              </View>
-
-              {/* Rol (Lectura) */}
-              <View style={styles.readOnlyContainer}>
-                <Typography variant="body2" style={styles.readOnlyLabel}>Tipo de Cuenta</Typography>
-                <View style={styles.readOnlyInput}>
-                  <Typography variant="body1" color={colors.textMuted}>
-                    {userProfile?.role === 'emprendedor' ? 'Emprendedor' : 'Cliente'}
-                  </Typography>
-                </View>
-              </View>
-
-              {/* Botón de Guardar */}
-              <Button
-                title="Guardar Cambios"
-                onPress={handleSaveProfile}
-                isLoading={updatingProfile}
-                style={{ marginTop: spacing.m }}
-              />
-
-              {/* Botón Panel de Control (Si es Emprendedor) */}
-              {userProfile?.role === 'emprendedor' && (
-                <Button
-                  title="Panel de Control"
-                  variant="outline"
-                  onPress={() => {
-                    setIsProfileModalVisible(false);
-                    router.push('/(emprendedor)/dashboard');
-                  }}
-                  style={{ marginTop: spacing.s }}
-                />
-              )}
-
-              {/* Divisor */}
-              <View style={styles.modalDivider} />
-
-              {/* Botón de Cerrar Sesión */}
-              <Pressable
-                style={({ pressed }) => [
-                  styles.logoutBtn,
-                  pressed && { opacity: 0.8 }
-                ]}
-                onPress={handleLogout}
-              >
-                <Typography variant="body1" style={{ color: colors.error, fontWeight: '600' }}>
-                  Cerrar Sesión
-                </Typography>
-              </Pressable>
             </ScrollView>
           </View>
         </View>
@@ -634,32 +666,32 @@ const styles = StyleSheet.create({
   // BOTTOM SHEET
   bottomSheet: {
     position: 'absolute',
-    bottom: 70,
-    left: spacing.m,
-    right: spacing.m,
+    bottom: 60,
+    left: 0,
+    right: 0,
+    paddingHorizontal: spacing.m,
+    paddingBottom: spacing.s,
   },
   selectedCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.xl,
     overflow: 'hidden',
-    ...shadows.floating,
-    borderWidth: 1,
-    borderColor: colors.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 8,
   },
   handleBar: {
-    width: 40,
-    height: 4,
-    backgroundColor: colors.border,
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginTop: spacing.s,
-    marginBottom: 2,
+    width: 0,
+    height: 0,
   },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.m,
-    paddingVertical: spacing.s,
+    paddingTop: spacing.s,
+    paddingBottom: spacing.xs,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     gap: spacing.s,

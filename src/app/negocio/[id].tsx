@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, Platform, Share, ImageBackground, Image, Pressable, Linking, Modal, TextInput, Alert, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ScrollView, Platform, Share, ImageBackground, Image, Pressable, Linking, Modal, TextInput, Alert, ActivityIndicator, Dimensions } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Typography } from '@/shared/components/Typography';
 import { Card } from '@/shared/components/Card';
@@ -43,6 +43,12 @@ export default function BusinessProfileScreen() {
   const [reviewerName, setReviewerName] = useState('');
   const [rating, setRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
+
+  // Galería y Lightbox
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [isGalleryLightboxVisible, setGalleryLightboxVisible] = useState(false);
+  const [lightboxImageIndex, setLightboxImageIndex] = useState(0);
+  const [selectedLightboxProduct, setSelectedLightboxProduct] = useState<Product | null>(null);
 
   const loadData = async () => {
     if (!id) return;
@@ -220,22 +226,85 @@ export default function BusinessProfileScreen() {
   return (
     <View style={{ flex: 1 }}>
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} bounces={false}>
-        <ImageBackground 
-          source={{ uri: business.imageUrl || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&q=80&w=1000' }} 
-          style={styles.coverImage}
-        >
-          <View style={styles.overlay}>
+        <View style={styles.coverContainer}>
+          <ScrollView
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onScroll={(e) => {
+              const slide = Math.round(e.nativeEvent.contentOffset.x / e.nativeEvent.layoutMeasurement.width);
+              if (slide !== activeImageIndex) {
+                setActiveImageIndex(slide);
+              }
+            }}
+            scrollEventThrottle={16}
+            style={styles.coverImage}
+          >
+            {business.images && business.images.length > 0 ? (
+              business.images.map((img, idx) => (
+                <Pressable 
+                  key={img + idx} 
+                  style={{ width: Dimensions.get('window').width, height: 300 }}
+                  onPress={() => {
+                    setLightboxImageIndex(idx);
+                    setGalleryLightboxVisible(true);
+                  }}
+                >
+                  <Image source={{ uri: img }} style={styles.coverImage} />
+                </Pressable>
+              ))
+            ) : (
+              <Pressable
+                style={{ width: Dimensions.get('window').width, height: 300 }}
+                onPress={() => setGalleryLightboxVisible(true)}
+              >
+                <Image 
+                  source={{ uri: business.imageUrl || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&q=80&w=1000' }} 
+                  style={styles.coverImage} 
+                />
+              </Pressable>
+            )}
+          </ScrollView>
+
+          <View style={styles.floatingOverlay} pointerEvents="none" />
+
+          <View style={styles.topBarContainer} pointerEvents="box-none">
             <View style={[layout.getContainerStyle(), styles.topBar]}>
-              <Pressable style={styles.iconBtn} onPress={() => router.back()}>
+              <Pressable 
+                style={styles.iconBtn} 
+                onPress={() => {
+                  if (router.canGoBack()) {
+                    router.back();
+                  } else {
+                    router.replace('/(tabs)');
+                  }
+                }}
+              >
                 <Ionicons name="arrow-back" size={24} color={colors.text} />
               </Pressable>
-              <Typography variant="h2" color={colors.surface} style={{ fontWeight: 'bold' }}>{business.name.toUpperCase()}</Typography>
+              <Typography variant="h2" color={colors.surface} style={{ fontWeight: 'bold', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width: 0, height: 1}, textShadowRadius: 3 }}>
+                {business.name.toUpperCase()}
+              </Typography>
               <Pressable style={styles.iconBtn} onPress={handleShare}>
                 <Ionicons name="share-social" size={24} color={colors.text} />
               </Pressable>
             </View>
           </View>
-        </ImageBackground>
+
+          {business.images && business.images.length > 1 && (
+            <View style={styles.dotsContainer}>
+              {business.images.map((_, idx) => (
+                <View 
+                  key={idx} 
+                  style={[
+                    styles.dotIndicator, 
+                    activeImageIndex === idx && styles.dotIndicatorActive
+                  ]} 
+                />
+              ))}
+            </View>
+          )}
+        </View>
 
         <View style={[layout.getContainerStyle(), styles.contentWrapper]}>
           
@@ -285,13 +354,15 @@ export default function BusinessProfileScreen() {
                 
                 return (
                   <View key={prod.name} style={styles.productRow}>
-                    {prod.imageUrl ? (
-                      <Image source={{ uri: prod.imageUrl }} style={styles.productImage} />
-                    ) : (
-                      <View style={[styles.productImage, styles.productImagePlaceholder]}>
-                        <Ionicons name="image-outline" size={24} color={colors.textMuted} />
-                      </View>
-                    )}
+                    <Pressable onPress={() => prod.imageUrl && setSelectedLightboxProduct(prod)}>
+                      {prod.imageUrl ? (
+                        <Image source={{ uri: prod.imageUrl }} style={styles.productImage} />
+                      ) : (
+                        <View style={[styles.productImage, styles.productImagePlaceholder]}>
+                          <Ionicons name="image-outline" size={24} color={colors.textMuted} />
+                        </View>
+                      )}
+                    </Pressable>
                     <View style={{ flex: 1, marginLeft: spacing.m }}>
                       <Typography variant="body1" style={{ fontWeight: 'bold' }}>{prod.name}</Typography>
                       {prod.description ? (
@@ -501,6 +572,102 @@ export default function BusinessProfileScreen() {
         </View>
       </Modal>
 
+      {/* LIGHTBOX DE PORTADA / GALERÍA */}
+      <Modal 
+        visible={isGalleryLightboxVisible} 
+        transparent 
+        animationType="fade"
+        onRequestClose={() => setGalleryLightboxVisible(false)}
+      >
+        <View style={styles.lightboxOverlay}>
+          <Pressable style={styles.lightboxCloseBtn} onPress={() => setGalleryLightboxVisible(false)}>
+            <Ionicons name="close" size={30} color="#fff" />
+          </Pressable>
+          {business.images && business.images[lightboxImageIndex] ? (
+            <Image 
+              source={{ uri: business.images[lightboxImageIndex] }} 
+              style={styles.lightboxImage} 
+              resizeMode="contain"
+            />
+          ) : (
+            <Image 
+              source={{ uri: business.imageUrl || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&q=80&w=1000' }} 
+              style={styles.lightboxImage} 
+              resizeMode="contain"
+            />
+          )}
+          
+          {business.images && business.images.length > 1 && (
+            <View style={styles.lightboxNavRow}>
+              <Pressable 
+                style={styles.lightboxNavBtn}
+                onPress={() => {
+                  setLightboxImageIndex(prev => (prev - 1 + business.images!.length) % business.images!.length);
+                }}
+              >
+                <Ionicons name="arrow-back" size={24} color="#fff" />
+              </Pressable>
+              <Typography variant="body1" style={{ color: '#fff', fontWeight: 'bold' }}>
+                {lightboxImageIndex + 1} / {business.images.length}
+              </Typography>
+              <Pressable 
+                style={styles.lightboxNavBtn}
+                onPress={() => {
+                  setLightboxImageIndex(prev => (prev + 1) % business.images!.length);
+                }}
+              >
+                <Ionicons name="arrow-forward" size={24} color="#fff" />
+              </Pressable>
+            </View>
+          )}
+        </View>
+      </Modal>
+
+      {/* LIGHTBOX DE PRODUCTO */}
+      <Modal
+        visible={selectedLightboxProduct !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedLightboxProduct(null)}
+      >
+        <View style={styles.lightboxOverlay}>
+          <Pressable style={styles.lightboxCloseBtn} onPress={() => setSelectedLightboxProduct(null)}>
+            <Ionicons name="close" size={30} color="#fff" />
+          </Pressable>
+          {selectedLightboxProduct && (
+            <View style={styles.productLightboxContent}>
+              <Image 
+                source={{ uri: selectedLightboxProduct.imageUrl }} 
+                style={styles.productLightboxImage}
+                resizeMode="contain"
+              />
+              <View style={styles.productLightboxInfo}>
+                <Typography variant="h2" style={{ fontWeight: 'bold', color: colors.text }}>
+                  {selectedLightboxProduct.name}
+                </Typography>
+                <Typography variant="body1" color={colors.primary} style={{ fontWeight: '700', marginVertical: spacing.s }}>
+                  S/ {selectedLightboxProduct.price.toFixed(2)}
+                </Typography>
+                {selectedLightboxProduct.description ? (
+                  <Typography variant="body2" color={colors.textMuted}>
+                    {selectedLightboxProduct.description}
+                  </Typography>
+                ) : null}
+                
+                <Button 
+                  title={cart[selectedLightboxProduct.name]?.quantity ? `En el Carrito (${cart[selectedLightboxProduct.name].quantity})` : "Agregar al Carrito"} 
+                  onPress={() => {
+                    updateCartQty(selectedLightboxProduct, 1);
+                    Alert.alert('Carrito actualizado', `Se agregó "${selectedLightboxProduct.name}" al carrito.`);
+                  }}
+                  style={{ marginTop: spacing.l }}
+                />
+              </View>
+            </View>
+          )}
+        </View>
+      </Modal>
+
     </View>
   );
 }
@@ -517,6 +684,89 @@ const styles = StyleSheet.create({
   coverImage: {
     height: 300,
     width: '100%',
+  },
+  coverContainer: {
+    height: 300,
+    width: '100%',
+    position: 'relative',
+  },
+  dotsContainer: {
+    position: 'absolute',
+    bottom: 50,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  dotIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.4)',
+  },
+  dotIndicatorActive: {
+    backgroundColor: colors.primary,
+    width: 12,
+  },
+  floatingOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  topBarContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingTop: Platform.OS === 'ios' ? 50 : spacing.xl,
+    paddingHorizontal: spacing.l,
+  },
+  lightboxOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  lightboxCloseBtn: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 60 : spacing.xl,
+    right: spacing.l,
+    zIndex: 10,
+    padding: spacing.s,
+  },
+  lightboxImage: {
+    width: '90%',
+    height: '75%',
+  },
+  lightboxNavRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '80%',
+    marginTop: spacing.l,
+  },
+  lightboxNavBtn: {
+    padding: spacing.s,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: radius.round,
+  },
+  productLightboxContent: {
+    width: '90%',
+    maxWidth: 440,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    overflow: 'hidden',
+    ...shadows.medium,
+  },
+  productLightboxImage: {
+    width: '100%',
+    height: 250,
+    backgroundColor: '#F3F4F6',
+  },
+  productLightboxInfo: {
+    padding: spacing.l,
   },
   overlay: {
     ...StyleSheet.absoluteFill,
