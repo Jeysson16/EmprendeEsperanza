@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ScrollView, ActivityIndicator, ImageBackground } from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Button } from '@/shared/components/Button';
 import { Card } from '@/shared/components/Card';
@@ -21,40 +22,55 @@ export default function WelcomeScreen() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.scroll}>
-      <View style={layout.getContainerStyle()}>
-        <View style={styles.header}>
-          <Typography variant="h1" color={colors.primary} align="center">EmprendeEsperanza</Typography>
-          <Typography variant="body1" align="center" style={{ marginTop: spacing.s, maxWidth: 450, alignSelf: 'center', color: colors.textMuted }}>
-            Descubre y apoya los comercios locales de La Esperanza. La mejor plataforma para conectar clientes y emprendedores del barrio.
-          </Typography>
-        </View>
-        
-        <Card style={styles.card}>
-          <Typography variant="h3" align="center" style={{ marginBottom: spacing.xl, fontWeight: 'bold' }}>
-            ¿Cómo deseas ingresar?
-          </Typography>
+    <ImageBackground 
+      source={require('../../assets/images/plaza_armas.jpg')} 
+      style={styles.backgroundImage}
+      imageStyle={{ opacity: 0.15 }}
+    >
+      <ScrollView contentContainerStyle={styles.scroll}>
+        <View style={layout.getContainerStyle()}>
+          <View style={styles.header}>
+            <Image 
+              source={require('../../assets/images/logo_esperanza.svg')} 
+              style={styles.logo}
+              contentFit="contain"
+            />
+            <Typography variant="h1" color={colors.primary} align="center">EmprendeEsperanza</Typography>
+            <Typography variant="body1" align="center" style={{ marginTop: spacing.s, maxWidth: 450, alignSelf: 'center', color: colors.textMuted }}>
+              Descubre y apoya los comercios locales de La Esperanza. La mejor plataforma para conectar clientes y emprendedores del barrio.
+            </Typography>
+          </View>
           
-          <Button 
-            title="Explorar como Invitado" 
-            onPress={() => router.push('/(tabs)')} 
-            style={{ marginBottom: spacing.m }}
-          />
-          <Button 
-            title="Iniciar Sesión / Registrarse" 
-            variant="outline"
-            onPress={() => router.push('/(auth)/login')} 
-          />
-        </Card>
-      </View>
-    </ScrollView>
+          <Card style={styles.card}>
+            <Typography variant="h3" align="center" style={{ marginBottom: spacing.xl, fontWeight: 'bold' }}>
+              ¿Cómo deseas ingresar?
+            </Typography>
+            
+            <Button 
+              title="Explorar como Invitado" 
+              onPress={() => router.push('/(tabs)')} 
+              style={{ marginBottom: spacing.m }}
+            />
+            <Button 
+              title="Iniciar Sesión / Registrarse" 
+              variant="outline"
+              onPress={() => router.push('/(auth)/login')} 
+            />
+          </Card>
+        </View>
+      </ScrollView>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
+  backgroundImage: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
   scroll: {
     flexGrow: 1,
-    backgroundColor: colors.background,
     justifyContent: 'center',
     padding: spacing.l,
   },
@@ -62,11 +78,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.xxl,
   },
+  logo: {
+    width: 150,
+    height: 150,
+    marginBottom: spacing.m,
+  },
   card: {
     padding: spacing.xxl,
     maxWidth: 500,
     width: '100%',
     alignSelf: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)', // slightly transparent card for the background to peek through
   }
 });
-

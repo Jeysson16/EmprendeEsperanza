@@ -1,36 +1,36 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, Modal, ActivityIndicator, Alert, Image } from 'react-native';
-import { useRouter } from 'expo-router';
-import * as ImagePicker from 'expo-image-picker';
-import { Typography } from '@/shared/components/Typography';
-import { Input } from '@/shared/components/Input';
+import { useAuth } from '@/core/context/AuthContext';
+import {
+  Business,
+  Category,
+  createBusiness,
+  createCategory,
+  deleteCategory,
+  getBusinessByOwnerId,
+  getCategories,
+  getOrdersByBusinessId,
+  Order,
+  Product,
+  updateBusiness,
+  updateCategory,
+  updateOrderStatus,
+  uploadImage
+} from '@/core/services/firebaseService';
+import { colors, layout, radius, shadows, spacing } from '@/core/theme';
 import { Button } from '@/shared/components/Button';
 import { Card } from '@/shared/components/Card';
-import { colors, spacing, layout, shadows, radius } from '@/core/theme';
+import { Input } from '@/shared/components/Input';
+import { Typography } from '@/shared/components/Typography';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '@/core/context/AuthContext';
-import { 
-  getCategories, 
-  getBusinessByOwnerId, 
-  createBusiness, 
-  updateBusiness, 
-  createCategory,
-  updateCategory,
-  deleteCategory,
-  uploadImage,
-  getOrdersByBusinessId,
-  updateOrderStatus,
-  Category, 
-  Business, 
-  Product,
-  Order
-} from '@/core/services/firebaseService';
+import * as ImagePicker from 'expo-image-picker';
+import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 export default function MaintainerDashboard() {
   const router = useRouter();
   const { user, logoutUser, userProfile } = useAuth();
   
-  const [activeTab, setActiveTab] = useState<'perfil' | 'catalogo' | 'pedidos' | 'categorias'>('perfil');
+  const [activeTab, setActiveTab] = useState<'perfil' | 'catalogo' | 'pedidos'>('perfil');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -372,7 +372,7 @@ export default function MaintainerDashboard() {
           <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
             <Ionicons name="storefront" size={32} color={colors.primary} />
             <Typography variant="h1" style={{ marginLeft: spacing.s, flex: 1 }} numberOfLines={1}>
-              {activeTab === 'categorias' ? 'Categorías' : (business ? 'Mi Comercio' : 'Registra tu Local')}
+              {business ? 'Mi Comercio' : 'Registra tu Local'}
             </Typography>
           </View>
           <Pressable onPress={handleLogout} style={styles.logoutBtn}>
@@ -412,12 +412,6 @@ export default function MaintainerDashboard() {
               setActiveTab('pedidos');
               if (business?.id) loadOrders(business.id);
             }}
-            style={styles.tabBtn}
-          />
-          <Button 
-            title="Categorías" 
-            variant={activeTab === 'categorias' ? 'primary' : 'ghost'} 
-            onPress={() => setActiveTab('categorias')}
             style={styles.tabBtn}
           />
         </View>
@@ -478,7 +472,7 @@ export default function MaintainerDashboard() {
                   <ActivityIndicator size="small" color={colors.primary} style={{ marginLeft: spacing.m }} />
                 ) : (
                   <Button 
-                    title="Subir al Storage" 
+                    title="Subir la imagen" 
                     variant="outline" 
                     onPress={() => handleSelectAndUploadImage(
                       `businesses/${user?.uid || 'unknown'}/cover.jpg`, 
@@ -671,73 +665,7 @@ export default function MaintainerDashboard() {
                 ))
               )}
             </View>
-          ) : (
-            // PESTAÑA: MANTENEDOR (CRUD) DE CATEGORÍAS
-            <View>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.l }}>
-                <Typography variant="h3">Categorías de Comercios</Typography>
-                <Button 
-                  title="+ Nueva Categoría" 
-                  variant="outline" 
-                  onPress={() => {
-                    setEditingCategory(null);
-                    setCatCrudName('');
-                    setCatCrudImg('');
-                    setCatCrudModalVisible(true);
-                  }}
-                  disabled={saving}
-                />
-              </View>
-
-              {categories.length === 0 ? (
-                <View style={styles.emptyContainer}>
-                  <Ionicons name="grid-outline" size={48} color={colors.textMuted} />
-                  <Typography variant="body1" color={colors.textMuted} style={{ marginTop: spacing.s, textAlign: 'center' }}>
-                    No hay categorías registradas en el sistema.
-                  </Typography>
-                </View>
-              ) : (
-                categories.map((cat) => (
-                  <View key={cat.id || cat.name} style={styles.productRow}>
-                    <View style={styles.productImgContainer}>
-                      {cat.imageUrl ? (
-                        <Image source={{ uri: cat.imageUrl }} style={{ width: 60, height: 60, borderRadius: 8 }} />
-                      ) : (
-                        <View style={styles.productImgPlaceholder}>
-                          <Ionicons name="image-outline" size={24} color={colors.textMuted} />
-                        </View>
-                      )}
-                    </View>
-                    <View style={{ flex: 1, marginLeft: spacing.m }}>
-                      <Typography variant="body1" style={{ fontWeight: 'bold' }}>{cat.name}</Typography>
-                      <Typography variant="body2" color={colors.textMuted} numberOfLines={1}>
-                        Colección: categories
-                      </Typography>
-                    </View>
-                    <Pressable 
-                      style={styles.actionIcon} 
-                      onPress={() => {
-                        setEditingCategory(cat);
-                        setCatCrudName(cat.name);
-                        setCatCrudImg(cat.imageUrl);
-                        setCatCrudModalVisible(true);
-                      }}
-                      disabled={saving}
-                    >
-                      <Ionicons name="create-outline" size={20} color={colors.primary} />
-                    </Pressable>
-                    <Pressable 
-                      style={[styles.actionIcon, { marginLeft: spacing.s }]} 
-                      onPress={() => handleDeleteCategory(cat.id!, cat.name)}
-                      disabled={saving}
-                    >
-                      <Ionicons name="trash-outline" size={20} color={colors.error} />
-                    </Pressable>
-                  </View>
-                ))
-              )}
-            </View>
-          )}
+          ) : null}
         </Card>
 
       </View>

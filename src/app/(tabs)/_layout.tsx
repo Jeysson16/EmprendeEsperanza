@@ -11,20 +11,39 @@ export default function TabLayout() {
       tabBarStyle: {
         borderTopWidth: 1,
         borderTopColor: colors.border,
-      }
+        paddingBottom: 4,
+        height: 60,
+      },
+      tabBarLabelStyle: {
+        fontSize: 11,
+        fontWeight: '600',
+      },
     }}>
       <Tabs.Screen 
         name="index" 
         options={{ 
-          title: 'Inicio',
-          tabBarIcon: ({ color }) => <Ionicons name="home" size={24} color={color} />
+          title: 'Mapa',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'map' : 'map-outline'} size={24} color={color} />
+          ),
         }} 
       />
       <Tabs.Screen 
         name="search" 
         options={{ 
-          title: 'Buscar',
-          tabBarIcon: ({ color }) => <Ionicons name="search" size={24} color={color} />
+          title: 'Explora',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'compass' : 'compass-outline'} size={24} color={color} />
+          ),
+        }} 
+      />
+      <Tabs.Screen 
+        name="mis-pedidos" 
+        options={{ 
+          title: 'Pedidos',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? 'receipt' : 'receipt-outline'} size={24} color={color} />
+          ),
         }} 
       />
     </Tabs>

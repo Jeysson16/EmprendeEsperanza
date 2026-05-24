@@ -365,3 +365,36 @@ export const getReviewsByBusinessId = async (businessId: string): Promise<Review
     }
   }
 };
+
+export const getOrdersByClientId = async (clientId: string): Promise<Order[]> => {
+  try {
+    const q = query(orderCollection, where('clientId', '==', clientId), orderBy('createdAt', 'desc'));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => {
+      const data = doc.data();
+      return { 
+        id: doc.id, 
+        ...data,
+        createdAt: data.createdAt ? data.createdAt.toDate() : new Date()
+      } as Order;
+    });
+  } catch (error) {
+    console.error('Error al obtener pedidos del cliente:', error);
+    try {
+      const qFallback = query(orderCollection, where('clientId', '==', clientId));
+      const snapshot = await getDocs(qFallback);
+      return snapshot.docs.map(doc => {
+        const data = doc.data();
+        return { 
+          id: doc.id, 
+          ...data,
+          createdAt: data.createdAt ? data.createdAt.toDate() : new Date()
+        } as Order;
+      });
+    } catch (fallbackError) {
+      console.error('Error en fallback de pedidos del cliente:', fallbackError);
+      return [];
+    }
+  }
+};
+
