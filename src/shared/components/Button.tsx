@@ -1,8 +1,9 @@
 import React from 'react';
-import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, TouchableOpacityProps } from 'react-native';
+import { Text, StyleSheet, ActivityIndicator, Pressable, PressableProps } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { colors, spacing, radius, typography } from '@/core/theme';
 
-interface ButtonProps extends TouchableOpacityProps {
+interface ButtonProps extends PressableProps {
   title: string;
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost';
   isLoading?: boolean;
@@ -16,6 +17,8 @@ export const Button: React.FC<ButtonProps> = ({
   disabled, 
   ...props 
 }) => {
+  const scale = useSharedValue(1);
+
   const getContainerStyle = () => {
     switch (variant) {
       case 'secondary': return styles.secondary;
@@ -34,32 +37,42 @@ export const Button: React.FC<ButtonProps> = ({
     }
   };
 
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: scale.value }],
+    };
+  });
+
   return (
-    <TouchableOpacity 
-      style={[
-        styles.container, 
-        getContainerStyle(), 
-        (disabled || isLoading) && styles.disabled,
-        style
-      ]} 
-      disabled={disabled || isLoading}
-      activeOpacity={0.8}
-      {...props}
-    >
-      {isLoading ? (
-        <ActivityIndicator color={getTextStyle().color} />
-      ) : (
-        <Text style={[typography.button, getTextStyle()]}>{title}</Text>
-      )}
-    </TouchableOpacity>
+    <Animated.View style={[animatedStyle, style]}>
+      <Pressable 
+        style={({ pressed, hovered }) => [
+          styles.container, 
+          getContainerStyle(), 
+          (disabled || isLoading) && styles.disabled,
+          hovered && variant === 'primary' && styles.hovered,
+          pressed && { opacity: 0.8 }
+        ]} 
+        onPressIn={() => { scale.value = withSpring(0.95); }}
+        onPressOut={() => { scale.value = withSpring(1); }}
+        disabled={disabled || isLoading}
+        {...props}
+      >
+        {isLoading ? (
+          <ActivityIndicator color={getTextStyle().color} />
+        ) : (
+          <Text style={[typography.button, getTextStyle()]}>{title}</Text>
+        )}
+      </Pressable>
+    </Animated.View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     paddingVertical: spacing.m,
-    paddingHorizontal: spacing.l,
-    borderRadius: radius.m,
+    paddingHorizontal: spacing.xl, // Más padding para look premium
+    borderRadius: radius.round, // Botones más redondeados
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
@@ -67,18 +80,21 @@ const styles = StyleSheet.create({
   primary: {
     backgroundColor: colors.primary,
   },
+  hovered: {
+    backgroundColor: colors.primaryDark,
+  },
   secondary: {
-    backgroundColor: colors.text,
+    backgroundColor: colors.secondary,
   },
   outline: {
     backgroundColor: 'transparent',
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: colors.primary,
   },
   ghost: {
     backgroundColor: 'transparent',
   },
   disabled: {
-    opacity: 0.6,
+    opacity: 0.5,
   }
 });
