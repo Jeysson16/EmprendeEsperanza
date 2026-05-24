@@ -1,12 +1,13 @@
 import React from 'react';
-import { Text, StyleSheet, ActivityIndicator, Pressable, PressableProps } from 'react-native';
+import { Text, StyleSheet, ActivityIndicator, Pressable, PressableProps, StyleProp, ViewStyle } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { colors, spacing, radius, typography } from '@/core/theme';
 
-interface ButtonProps extends PressableProps {
+interface ButtonProps extends Omit<PressableProps, 'style'> {
   title: string;
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost';
   isLoading?: boolean;
+  style?: StyleProp<ViewStyle>;
 }
 
 export const Button: React.FC<ButtonProps> = ({ 

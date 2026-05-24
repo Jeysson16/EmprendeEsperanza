@@ -1,15 +1,40 @@
-import React from 'react';
-import { View, StyleSheet, ScrollView, Platform, Share } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, StyleSheet, ScrollView, Platform, Share, ImageBackground } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Typography } from '@/shared/components/Typography';
-import { Button } from '@/shared/components/Button';
 import { Card } from '@/shared/components/Card';
-import { colors, spacing, radius, layout } from '@/core/theme';
+import { colors, spacing, radius, layout, shadows } from '@/core/theme';
 import { Ionicons } from '@expo/vector-icons';
+import { Pressable } from 'react-native';
+import { getBusinessById, Business } from '@/core/services/firebaseService';
 
 export default function BusinessProfileScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const [business, setBusiness] = useState<Business | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      // Intenta cargar de firebase
+      const data = await getBusinessById(id as string);
+      if (data) {
+        setBusiness(data);
+      } else {
+        // Fallback mockup por si el id no existe aún
+        setBusiness({
+          id: id as string,
+          name: 'Bodega Doña Lucha',
+          category: 'Abarrotes',
+          description: 'Tu bodega de confianza desde hace 15 años. Ofrecemos abarrotes, frutas frescas, verduras del día y productos de limpieza. ¡Todo lo que necesitas sin salir del barrio!',
+          location: { latitude: 0, longitude: 0 },
+          address: 'Av. Esperanza 452, Sector 2',
+          phone: '+51 987 654 321',
+          isOpen: true,
+          imageUrl: 'https://images.unsplash.com/photo-1578916171728-46686eac8d58?auto=format&fit=crop&q=80&w=1000'
+        });
+      }
+    })();
+  }, [id]);
 
   const handleShare = async () => {
     try {
@@ -17,86 +42,78 @@ export default function BusinessProfileScreen() {
         navigator.clipboard.writeText(window.location.href);
         alert('Enlace copiado al portapapeles');
       } else {
-        await Share.share({
-          message: `Mira este excelente comercio en La Esperanza: https://emprendeesperanza.com/negocio/${id}`
-        });
+        await Share.share({ message: `Mira este excelente comercio en La Esperanza: https://emprendeesperanza.com/negocio/${id}` });
       }
     } catch (error) {
       console.log('Error sharing', error);
     }
   };
 
+  if (!business) return null;
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
-      {/* Portada a Pantalla Completa en Web */}
-      <View style={styles.coverImage}>
-        <View style={layout.getContainerStyle()}>
-          <Button 
-            variant="ghost" 
-            title="" 
-            onPress={() => router.back()} 
-            style={styles.backBtn}
-          >
-            <Ionicons name="arrow-back" size={24} color={colors.surface} />
-          </Button>
-        </View>
-      </View>
-
-      <View style={layout.getContainerStyle()}>
-        <View style={styles.contentWrapper}>
-          
-          <View style={styles.mainColumn}>
-            <View style={styles.profileHeader}>
-              <View style={styles.logo} />
-              <View style={{ flex: 1, marginLeft: spacing.m }}>
-                <Typography variant="h1">Negocio Local {id}</Typography>
-                <Typography variant="h3" color={colors.primary}>Comida Peruana • Abierto ahora</Typography>
-              </View>
-              <Button variant="outline" title="Compartir" onPress={handleShare}>
-                <Ionicons name="share-social-outline" size={20} color={colors.primary} style={{ marginRight: 8 }} />
-              </Button>
-            </View>
-
-            <Card style={styles.infoCard}>
-              <Typography variant="h3" style={{ marginBottom: spacing.s }}>Acerca de nosotros</Typography>
-              <Typography variant="body1" style={{ marginBottom: spacing.m }}>
-                Somos el mejor lugar para disfrutar de la gastronomía en La Esperanza. 
-                Ven y disfruta de un ambiente familiar con platillos preparados con ingredientes 100% locales y frescos.
-              </Typography>
-              
-              <View style={styles.row}>
-                <View style={styles.iconBox}>
-                  <Ionicons name="location" size={20} color={colors.primary} />
-                </View>
-                <Typography variant="body1" style={{ marginLeft: spacing.s, fontWeight: '500' }}>Av. Tahuantinsuyo 123, La Esperanza</Typography>
-              </View>
-              
-              <View style={[styles.row, { marginTop: spacing.m }]}>
-                <View style={styles.iconBox}>
-                  <Ionicons name="call" size={20} color={colors.primary} />
-                </View>
-                <Typography variant="body1" style={{ marginLeft: spacing.s, fontWeight: '500' }}>+51 987 654 321</Typography>
-              </View>
-            </Card>
+    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} bounces={false}>
+      <ImageBackground 
+        source={{ uri: business.imageUrl || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&q=80&w=1000' }} 
+        style={styles.coverImage}
+      >
+        <View style={styles.overlay}>
+          <View style={[layout.getContainerStyle(), styles.topBar]}>
+            <Pressable style={styles.iconBtn} onPress={() => router.back()}>
+              <Ionicons name="arrow-back" size={24} color={colors.text} />
+            </Pressable>
+            <Typography variant="h2" color={colors.surface} style={{ fontWeight: 'bold' }}>{business.name.toUpperCase()}</Typography>
+            <Pressable style={styles.iconBtn} onPress={handleShare}>
+              <Ionicons name="share-social" size={24} color={colors.text} />
+            </Pressable>
           </View>
-
-          <View style={styles.productsColumn}>
-            <Typography variant="h2" style={{ marginVertical: spacing.l }}>Nuestro Catálogo</Typography>
-            <View style={styles.grid}>
-              {[1, 2, 3, 4, 5, 6].map(item => (
-                <Card key={item} style={styles.productCard} noPadding>
-                  <View style={styles.productImage} />
-                  <View style={{ padding: spacing.m }}>
-                    <Typography variant="h3">Producto Premium {item}</Typography>
-                    <Typography variant="body2" style={{ marginVertical: spacing.xs }}>Descripción deliciosa del producto local.</Typography>
-                    <Typography variant="h2" color={colors.primary}>S/ 15.00</Typography>
-                  </View>
-                </Card>
-              ))}
-            </View>
-          </View>
-
         </View>
+      </ImageBackground>
+
+      <View style={[layout.getContainerStyle(), styles.contentWrapper]}>
+        
+        <View style={styles.badgeRow}>
+          <View style={styles.badge}>
+            <Typography variant="caption" color={colors.primaryDark} style={{fontWeight:'bold'}}>{business.category.toUpperCase()}</Typography>
+          </View>
+          <View style={{flexDirection: 'row', alignItems: 'center'}}>
+            <View style={[styles.dot, {backgroundColor: business.isOpen ? colors.success : colors.error}]} />
+            <Typography variant="caption" color={business.isOpen ? colors.success : colors.error} style={{fontWeight:'bold'}}>
+              {business.isOpen ? 'Abierto ahora' : 'Cerrado'}
+            </Typography>
+          </View>
+        </View>
+
+        <Typography variant="h1" style={styles.businessName}>{business.name}</Typography>
+        
+        <View style={styles.addressRow}>
+          <Ionicons name="location-outline" size={16} color={colors.textMuted} />
+          <View style={{marginLeft: spacing.s}}>
+            <Typography variant="body2">{business.address}</Typography>
+            <Typography variant="caption">A 200m de ti</Typography>
+          </View>
+        </View>
+
+        <View style={styles.divider} />
+
+        <Typography variant="h2" style={styles.sectionTitle}>Sobre nosotros</Typography>
+        <Typography variant="body1" style={styles.description}>
+          {business.description}
+        </Typography>
+
+        <Card style={styles.scheduleCard} noPadding>
+          <View style={styles.scheduleHeader}>
+            <View style={styles.scheduleIconBox}>
+              <Ionicons name="time-outline" size={24} color={colors.primary} />
+            </View>
+            <View style={{marginLeft: spacing.m, flex: 1}}>
+              <Typography variant="h3">Horario de atención</Typography>
+              <Typography variant="body2">Hoy: 08:00 AM - 09:00 PM</Typography>
+            </View>
+            <Ionicons name="chevron-down" size={24} color={colors.textMuted} />
+          </View>
+        </Card>
+
       </View>
     </ScrollView>
   );
@@ -106,71 +123,81 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   scrollContent: { paddingBottom: spacing.xxl },
   coverImage: {
-    height: layout.isWebDesktop ? 350 : 220,
-    backgroundColor: '#374151', // Dark gray placeholder
-    paddingTop: Platform.OS === 'ios' ? 50 : spacing.l,
-    paddingHorizontal: spacing.m,
+    height: 300,
+    width: '100%',
   },
-  backBtn: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(0,0,0,0.4)',
+  overlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(17, 24, 39, 0.5)', // Oscurecer la imagen
+    paddingTop: Platform.OS === 'ios' ? 50 : spacing.xl,
+    paddingHorizontal: spacing.l,
+  },
+  topBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  iconBtn: {
+    backgroundColor: 'rgba(255,255,255,0.9)',
     borderRadius: radius.round,
-    padding: spacing.xs,
+    padding: spacing.s,
+    ...shadows.soft,
   },
   contentWrapper: {
-    padding: spacing.l,
-    marginTop: layout.isWebDesktop ? -80 : -40,
-  },
-  mainColumn: {
-    width: '100%',
-  },
-  productsColumn: {
-    width: '100%',
-    marginTop: spacing.xl,
-  },
-  profileHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: colors.surface,
+    marginTop: -40,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
     padding: spacing.xl,
-    borderRadius: radius.xl,
-    marginBottom: spacing.l,
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 20 },
-      android: { elevation: 8 },
-      web: { boxShadow: '0 10px 40px rgba(0,0,0,0.08)' }
-    })
+    minHeight: 500,
   },
-  logo: {
-    width: layout.isWebDesktop ? 100 : 70,
-    height: layout.isWebDesktop ? 100 : 70,
-    borderRadius: radius.round,
-    backgroundColor: colors.primaryLight,
-  },
-  infoCard: {
-    padding: spacing.xl,
-  },
-  row: {
+  badgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: spacing.m,
   },
-  iconBox: {
+  badge: {
+    backgroundColor: colors.primaryLight + '20',
+    paddingHorizontal: spacing.m,
+    paddingVertical: 4,
+    borderRadius: radius.round,
+    marginRight: spacing.m,
+  },
+  dot: {
+    width: 8, height: 8, borderRadius: 4, marginRight: 6
+  },
+  businessName: {
+    marginBottom: spacing.m,
+  },
+  addressRow: {
+    flexDirection: 'row',
+    marginBottom: spacing.xl,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: spacing.xl,
+  },
+  sectionTitle: {
+    marginBottom: spacing.m,
+  },
+  description: {
+    lineHeight: 24,
+    marginBottom: spacing.xl,
+  },
+  scheduleCard: {
+    backgroundColor: colors.background,
+    borderWidth: 0,
+    borderRadius: radius.m,
+  },
+  scheduleHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.m,
+  },
+  scheduleIconBox: {
     backgroundColor: colors.primaryLight + '20',
     padding: spacing.s,
     borderRadius: radius.round,
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
-  productCard: {
-    width: layout.isWebDesktop ? '31%' : '48%',
-    marginBottom: spacing.l,
-    overflow: 'hidden',
-  },
-  productImage: {
-    height: 160,
-    backgroundColor: '#EBEBEB',
   }
 });

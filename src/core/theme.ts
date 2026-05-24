@@ -2,16 +2,16 @@ import { Dimensions, Platform } from 'react-native';
 
 const { width } = Dimensions.get('window');
 
-// Definición de colores ultra-premium
+// Definición de colores ultra-premium basados en el logo
 export const colors = {
-  primary: '#FF4500', // Naranja vibrante profundo
-  primaryLight: '#FF7043',
-  primaryDark: '#D84315',
-  secondary: '#2E1E5B', // Morado oscuro elegante para contraste
-  background: '#F9FAFB', // Gris ultra claro (casi blanco)
-  surface: '#FFFFFF', // Blanco puro para tarjetas
-  text: '#111827', // Casi negro para legibilidad
-  textMuted: '#6B7280', // Gris medio
+  primary: '#0CB083', // Teal/Verde Esmeralda vibrante
+  primaryLight: '#3AD0A6',
+  primaryDark: '#07825E',
+  secondary: '#111827', // Oscuro profundo para contraste
+  background: '#F9FAFB', // Gris ultra claro
+  surface: '#FFFFFF', // Blanco puro
+  text: '#1F2937', 
+  textMuted: '#6B7280', 
   border: '#E5E7EB',
   error: '#EF4444',
   success: '#10B981',
@@ -77,7 +77,7 @@ export const layout = {
   getContainerStyle: () => ({
     flex: 1,
     alignSelf: 'center' as const,
-    width: '100%',
-    maxWidth: Platform.OS === 'web' ? 1024 : '100%',
+    width: '100%' as any,
+    maxWidth: (Platform.OS === 'web' ? 1024 : '100%') as any,
   })
 };
