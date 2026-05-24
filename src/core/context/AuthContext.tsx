@@ -7,7 +7,8 @@ import {
   loginConEmail, 
   registroConEmail, 
   loginConGoogle, 
-  logout 
+  logout,
+  updateUserProfile
 } from '../services/authService';
 
 interface AuthContextType {
@@ -19,6 +20,7 @@ interface AuthContextType {
   loginWithGoogle: (rolPredeterminado?: 'cliente' | 'emprendedor') => Promise<UserProfile>;
   logoutUser: () => Promise<void>;
   updateProfileState: (updatedProfile: UserProfile) => void;
+  updateUserProfileData: (displayName: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -108,6 +110,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUserProfile(updatedProfile);
   };
 
+  const updateUserProfileData = async (displayName: string) => {
+    if (!user || !userProfile) return;
+    setLoading(true);
+    try {
+      await updateUserProfile(user.uid, displayName);
+      setUserProfile({
+        ...userProfile,
+        displayName
+      });
+    } catch (error) {
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -119,6 +137,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         loginWithGoogle,
         logoutUser,
         updateProfileState,
+        updateUserProfileData,
       }}
     >
       {children}

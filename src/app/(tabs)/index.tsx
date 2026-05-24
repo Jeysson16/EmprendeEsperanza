@@ -1,13 +1,16 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View, StyleSheet, Platform, Pressable, Alert, ScrollView, TextInput,
-  ActivityIndicator, Image
+  ActivityIndicator, Image, Modal
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
 import { Typography } from '@/shared/components/Typography';
 import { Card } from '@/shared/components/Card';
+import { Button } from '@/shared/components/Button';
+import { Input } from '@/shared/components/Input';
 import CustomMap from '@/shared/components/Map';
+import { MapRegion } from '@/shared/components/Map/CustomMap';
 import {
   getBusinesses, getCategories, Business, Category, seedInitialData
 } from '@/core/services/firebaseService';
@@ -15,154 +18,32 @@ import { colors, spacing, radius, shadows, layout } from '@/core/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/core/context/AuthContext';
 
-// ─── Skeleton placeholder card ───────────────────────────────────────────────
-function SkeletonCard() {
-  return (
-    <View style={skStyles.card}>
-      <View style={skStyles.image} />
-      <View style={skStyles.body}>
-        <View style={[skStyles.line, { width: '70%' }]} />
-        <View style={[skStyles.line, { width: '45%', marginTop: 8 }]} />
-        <View style={[skStyles.line, { width: '30%', marginTop: 8 }]} />
-      </View>
-    </View>
-  );
+// ─── Compute best region to show all given businesses ────────────────────────
+function getBoundsForBusinesses(
+  businesses: Business[],
+  userLocation?: { latitude: number; longitude: number } | null
+): MapRegion | null {
+  const points = [
+    ...businesses.map(b => ({ lat: b.location.latitude, lng: b.location.longitude })),
+    ...(userLocation ? [{ lat: userLocation.latitude, lng: userLocation.longitude }] : [])
+  ];
+  if (points.length === 0) return null;
+
+  const lats = points.map(p => p.lat);
+  const lngs = points.map(p => p.lng);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs);
+  const maxLng = Math.max(...lngs);
+
+  const centerLat = (minLat + maxLat) / 2;
+  const centerLng = (minLng + maxLng) / 2;
+  const spanLat = Math.max(maxLat - minLat, 0.005);
+  const spanLng = Math.max(maxLng - minLng, 0.005);
+  const bboxOffset = Math.max(spanLat, spanLng) / 2 * 1.4; // 40% padding
+
+  return { latitude: centerLat, longitude: centerLng, bboxOffset };
 }
-const skStyles = StyleSheet.create({
-  card: {
-    flexDirection: 'row',
-    backgroundColor: colors.surface,
-    borderRadius: radius.l,
-    marginBottom: spacing.m,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  image: {
-    width: 90,
-    height: 90,
-    backgroundColor: '#E5E7EB',
-  },
-  body: {
-    flex: 1,
-    padding: spacing.m,
-    justifyContent: 'center',
-  },
-  line: {
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#E5E7EB',
-  },
-});
-
-// ─── Business list card ───────────────────────────────────────────────────────
-function BusinessCard({
-  business, onPress
-}: { business: Business & { distance?: number }, onPress: () => void }) {
-  const [imgLoaded, setImgLoaded] = useState(false);
-  const [imgError, setImgError] = useState(false);
-
-  return (
-    <Pressable onPress={onPress} style={({ pressed }) => [listStyles.card, pressed && listStyles.cardPressed]}>
-      <View style={listStyles.imgWrap}>
-        {business.imageUrl && !imgError ? (
-          <>
-            {!imgLoaded && <View style={listStyles.imgSkeleton} />}
-            <Image
-              source={{ uri: business.imageUrl }}
-              style={[listStyles.img, !imgLoaded && { opacity: 0 }]}
-              onLoad={() => setImgLoaded(true)}
-              onError={() => setImgError(true)}
-            />
-          </>
-        ) : (
-          <View style={listStyles.imgPlaceholder}>
-            <Ionicons name="storefront-outline" size={28} color={colors.textMuted} />
-          </View>
-        )}
-        <View style={[listStyles.openBadge, { backgroundColor: business.isOpen ? '#10B981' : '#6B7280' }]}>
-          <Typography variant="caption" style={{ color: '#fff', fontWeight: 'bold', fontSize: 9 }}>
-            {business.isOpen ? 'ABIERTO' : 'CERRADO'}
-          </Typography>
-        </View>
-      </View>
-
-      <View style={listStyles.info}>
-        <Typography variant="body1" style={{ fontWeight: 'bold' }} numberOfLines={1}>
-          {business.name}
-        </Typography>
-        <View style={listStyles.categoryRow}>
-          <Ionicons name="pricetag-outline" size={12} color={colors.primary} />
-          <Typography variant="caption" color={colors.primary} style={{ marginLeft: 4 }}>
-            {business.category}
-          </Typography>
-        </View>
-        {business.description ? (
-          <Typography variant="body2" color={colors.textMuted} numberOfLines={2} style={{ marginTop: 2 }}>
-            {business.description}
-          </Typography>
-        ) : null}
-        <View style={listStyles.metaRow}>
-          {business.distance !== undefined && (
-            <View style={listStyles.distancePill}>
-              <Ionicons name="location-outline" size={12} color={colors.primary} />
-              <Typography variant="caption" style={{ marginLeft: 3, color: colors.primary, fontWeight: '600' }}>
-                {business.distance < 1
-                  ? `${(business.distance * 1000).toFixed(0)} m`
-                  : `${business.distance.toFixed(1)} km`}
-              </Typography>
-            </View>
-          )}
-          {business.address ? (
-            <Typography variant="caption" color={colors.textMuted} numberOfLines={1} style={{ flex: 1, marginLeft: spacing.s }}>
-              {business.address}
-            </Typography>
-          ) : null}
-        </View>
-      </View>
-      <Ionicons name="chevron-forward" size={20} color={colors.textMuted} style={{ alignSelf: 'center', marginRight: spacing.s }} />
-    </Pressable>
-  );
-}
-
-const listStyles = StyleSheet.create({
-  card: {
-    flexDirection: 'row',
-    backgroundColor: colors.surface,
-    borderRadius: radius.l,
-    marginBottom: spacing.m,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadows.soft,
-  },
-  cardPressed: { opacity: 0.85, transform: [{ scale: 0.99 }] },
-  imgWrap: { width: 90, minHeight: 90, position: 'relative' },
-  imgSkeleton: {
-    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: '#E5E7EB',
-  },
-  img: { width: 90, height: '100%', minHeight: 90 },
-  imgPlaceholder: {
-    width: 90, height: 90,
-    backgroundColor: '#F3F4F6',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  openBadge: {
-    position: 'absolute', bottom: 6, left: 4,
-    paddingHorizontal: 5, paddingVertical: 2,
-    borderRadius: 4,
-  },
-  info: { flex: 1, padding: spacing.m },
-  categoryRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.s },
-  distancePill: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: colors.primary + '15',
-    paddingHorizontal: 6, paddingVertical: 2,
-    borderRadius: 10,
-  },
-});
 
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 export default function MapScreen() {
@@ -172,27 +53,25 @@ export default function MapScreen() {
   const [businesses, setBusinesses] = useState<(Business & { distance?: number })[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [selectedBusiness, setSelectedBusiness] = useState<Business | null>(null);
+  const [selectedBusiness, setSelectedBusiness] = useState<(Business & { distance?: number }) | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
   const [loadingData, setLoadingData] = useState(true);
+  const [mapRegion, setMapRegion] = useState<MapRegion | null>(null);
 
   useEffect(() => {
     (async () => {
-      // Load categories
       const cats = await getCategories();
       setCategories(cats);
 
-      // Get location
       let coords: { latitude: number; longitude: number } | undefined;
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status === 'granted') {
         const loc = await Location.getCurrentPositionAsync({});
         coords = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
         setLocation(coords);
+        setMapRegion({ latitude: coords.latitude, longitude: coords.longitude, bboxOffset: 0.015 });
       }
 
-      // Fetch businesses
       const data = await getBusinesses(coords?.latitude, coords?.longitude);
       setBusinesses(data);
       setLoadingData(false);
@@ -231,7 +110,7 @@ export default function MapScreen() {
     }
   };
 
-  // Filtered businesses
+  // Filter businesses by category and search
   const filteredBusinesses = useMemo(() => {
     return businesses.filter(b => {
       const matchesCategory = !selectedCategory || b.category === selectedCategory;
@@ -240,243 +119,274 @@ export default function MapScreen() {
     });
   }, [businesses, selectedCategory, searchQuery]);
 
+  // When a category is selected, zoom map to matching businesses
+  const handleCategorySelect = useCallback((catName: string | null) => {
+    setSelectedCategory(catName);
+    setSelectedBusiness(null);
+
+    if (!catName) {
+      // Reset to user location zoom
+      if (location) {
+        setMapRegion({ latitude: location.latitude, longitude: location.longitude, bboxOffset: 0.015 });
+      }
+      return;
+    }
+
+    const matching = businesses.filter(b => b.category === catName);
+    if (matching.length > 0) {
+      const region = getBoundsForBusinesses(matching, location);
+      if (region) setMapRegion(region);
+    }
+  }, [businesses, location]);
+
+  // When searching, zoom to matching businesses
+  useEffect(() => {
+    if (!searchQuery) {
+      if (location) setMapRegion({ latitude: location.latitude, longitude: location.longitude, bboxOffset: 0.015 });
+      return;
+    }
+    if (filteredBusinesses.length > 0) {
+      const region = getBoundsForBusinesses(filteredBusinesses, location);
+      if (region) setMapRegion(region);
+    }
+  }, [searchQuery, filteredBusinesses]);
+
+  // When a marker is selected, zoom to that business
+  const handleSelectBusiness = useCallback((b: Business) => {
+    setSelectedBusiness(b as Business & { distance?: number });
+    setMapRegion({
+      latitude: b.location.latitude,
+      longitude: b.location.longitude,
+      bboxOffset: 0.006,
+    });
+  }, []);
+
   return (
     <View style={styles.container}>
-      {/* MAP LAYER */}
+      {/* MAP - full screen behind overlays */}
       <View style={StyleSheet.absoluteFill}>
         <CustomMap
           businesses={filteredBusinesses}
           userLocation={location}
-          onSelectBusiness={setSelectedBusiness}
+          onSelectBusiness={handleSelectBusiness}
+          region={mapRegion}
         />
       </View>
 
-      {/* FLOATING OVERLAYS */}
-      <View style={[styles.floatingContainer, layout.getContainerStyle()]}>
+      {/* ── TOP OVERLAY: Search + Profile + Category chips ── */}
+      <View style={styles.topContainer} pointerEvents="box-none">
 
-        {/* ── TOP: Search + Profile + Categories ── */}
-        <View style={styles.topOverlay}>
-          {/* Search Bar + Profile */}
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <View style={styles.searchBox}>
-              <Ionicons name="search" size={18} color={colors.primary} />
-              <TextInput
-                placeholder="Buscar negocios..."
-                placeholderTextColor={colors.textMuted}
-                style={styles.searchInput}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-              />
-              {searchQuery.length > 0 && (
-                <Pressable onPress={() => setSearchQuery('')}>
-                  <Ionicons name="close-circle" size={18} color={colors.textMuted} />
-                </Pressable>
-              )}
-            </View>
-            <Pressable style={styles.profileBtn} onPress={handleProfilePress}>
-              <Ionicons
-                name={user ? 'person-circle' : 'log-in-outline'}
-                size={26}
-                color={user ? colors.primary : colors.text}
-              />
-            </Pressable>
-          </View>
-
-          {/* Category chips */}
-          {categories.length > 0 && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={{ marginTop: spacing.m }}
-              contentContainerStyle={{ paddingRight: spacing.m }}
-            >
-              {/* "Todos" chip */}
-              <Pressable
-                style={[styles.chip, !selectedCategory && styles.chipActive]}
-                onPress={() => setSelectedCategory(null)}
-              >
-                <Ionicons name="grid" size={14} color={!selectedCategory ? '#fff' : colors.primary} />
-                <Typography
-                  variant="caption"
-                  style={[styles.chipText, !selectedCategory && styles.chipTextActive]}
-                >
-                  Todos
-                </Typography>
+        {/* Search bar row - full width */}
+        <View style={styles.searchRow}>
+          <View style={styles.searchBox}>
+            <Ionicons name="search" size={18} color={colors.primary} />
+            <TextInput
+              placeholder="Buscar negocios en La Esperanza..."
+              placeholderTextColor={colors.textMuted}
+              style={styles.searchInput}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              returnKeyType="search"
+            />
+            {searchQuery.length > 0 && (
+              <Pressable onPress={() => setSearchQuery('')}>
+                <Ionicons name="close-circle" size={18} color={colors.textMuted} />
               </Pressable>
+            )}
+          </View>
+          <Pressable style={styles.profileBtn} onPress={handleProfilePress}>
+            <Ionicons
+              name={user ? 'person-circle' : 'log-in-outline'}
+              size={26}
+              color={user ? colors.primary : colors.text}
+            />
+          </Pressable>
+        </View>
 
-              {categories.map(cat => {
-                const isActive = selectedCategory === cat.name;
-                return (
-                  <Pressable
-                    key={cat.id || cat.name}
-                    style={[styles.chip, isActive && styles.chipActive]}
-                    onPress={() => setSelectedCategory(isActive ? null : cat.name)}
-                  >
-                    <Typography
-                      variant="caption"
-                      style={[styles.chipText, isActive && styles.chipTextActive]}
-                    >
-                      {cat.name}
-                    </Typography>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-          )}
-
-          {/* Seed button if empty */}
-          {businesses.length === 0 && !loadingData && (
-            <Pressable style={styles.seedBtn} onPress={handleSeed}>
-              <Ionicons name="cloud-upload-outline" size={16} color="#fff" />
-              <Typography variant="body2" style={{ color: '#fff', marginLeft: spacing.s, fontWeight: '600' }}>
-                Generar datos de prueba
+        {/* Category chips horizontal scroll */}
+        {categories.length > 0 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={{ marginTop: spacing.s }}
+            contentContainerStyle={{ paddingRight: spacing.m }}
+            pointerEvents="box-none"
+          >
+            <Pressable
+              style={[styles.chip, !selectedCategory && styles.chipActive]}
+              onPress={() => handleCategorySelect(null)}
+            >
+              <Ionicons name="grid" size={13} color={!selectedCategory ? '#fff' : colors.primary} />
+              <Typography variant="caption" style={[styles.chipText, !selectedCategory && styles.chipTextActive]}>
+                Todos
               </Typography>
             </Pressable>
-          )}
-        </View>
 
-        {/* ── TOGGLE: Map / List ── */}
-        <View style={styles.toggleContainer}>
-          <Pressable
-            style={[styles.toggleBtn, viewMode === 'map' && styles.toggleBtnActive]}
-            onPress={() => setViewMode('map')}
-          >
-            <Ionicons name="map-outline" size={18} color={viewMode === 'map' ? '#fff' : colors.text} />
-            <Typography
-              variant="caption"
-              style={[styles.toggleLabel, viewMode === 'map' && { color: '#fff' }]}
-            >
-              Mapa
-            </Typography>
-          </Pressable>
-          <Pressable
-            style={[styles.toggleBtn, viewMode === 'list' && styles.toggleBtnActive]}
-            onPress={() => setViewMode('list')}
-          >
-            <Ionicons name="list-outline" size={18} color={viewMode === 'list' ? '#fff' : colors.text} />
-            <Typography
-              variant="caption"
-              style={[styles.toggleLabel, viewMode === 'list' && { color: '#fff' }]}
-            >
-              Lista
-            </Typography>
-          </Pressable>
-        </View>
-
-        {/* ── LIST VIEW: shown when viewMode === 'list' ── */}
-        {viewMode === 'list' && (
-          <View style={styles.listOverlay}>
-            <ScrollView
-              style={{ flex: 1 }}
-              contentContainerStyle={{ padding: spacing.m, paddingBottom: 90 }}
-              showsVerticalScrollIndicator={false}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.m }}>
-                <Typography variant="body1" style={{ fontWeight: 'bold', flex: 1 }}>
-                  {filteredBusinesses.length} comercio{filteredBusinesses.length !== 1 ? 's' : ''}
-                  {selectedCategory ? ` · ${selectedCategory}` : ' cerca de ti'}
-                </Typography>
-              </View>
-
-              {loadingData ? (
-                <>
-                  <SkeletonCard /><SkeletonCard /><SkeletonCard />
-                </>
-              ) : filteredBusinesses.length === 0 ? (
-                <View style={styles.emptyList}>
-                  <Ionicons name="storefront-outline" size={48} color={colors.textMuted} />
-                  <Typography variant="body1" color={colors.textMuted} style={{ marginTop: spacing.m, textAlign: 'center' }}>
-                    No se encontraron comercios{selectedCategory ? ` en "${selectedCategory}"` : ''}
+            {categories.map(cat => {
+              const isActive = selectedCategory === cat.name;
+              return (
+                <Pressable
+                  key={cat.id || cat.name}
+                  style={[styles.chip, isActive && styles.chipActive]}
+                  onPress={() => handleCategorySelect(isActive ? null : cat.name)}
+                >
+                  <Typography variant="caption" style={[styles.chipText, isActive && styles.chipTextActive]}>
+                    {cat.name}
                   </Typography>
-                </View>
-              ) : (
-                filteredBusinesses.map(b => (
-                  <BusinessCard
-                    key={b.id || b.name}
-                    business={b}
-                    onPress={() => router.push(`/negocio/${b.id}`)}
-                  />
-                ))
-              )}
-            </ScrollView>
-          </View>
-        )}
-
-        {/* ── BOTTOM: Selected business card (map mode) ── */}
-        {viewMode === 'map' && selectedBusiness && (
-          <View style={styles.bottomOverlay}>
-            <Card style={styles.selectedCard} noPadding>
-              <View style={styles.cardHeader}>
-                <View style={styles.cardBadge}>
-                  <Typography variant="caption" color={selectedBusiness.isOpen ? colors.success : colors.textMuted} style={{ fontWeight: 'bold' }}>
-                    {selectedBusiness.isOpen ? 'ABIERTO' : 'CERRADO'}
-                  </Typography>
-                </View>
-                {selectedBusiness.distance !== undefined && (
-                  <View style={styles.distanceBadge}>
-                    <Ionicons name="location-outline" size={12} color={colors.primary} />
-                    <Typography variant="caption" style={{ marginLeft: 4, color: colors.primary }}>
-                      {selectedBusiness.distance < 1
-                        ? `${(selectedBusiness.distance * 1000).toFixed(0)} m`
-                        : `${selectedBusiness.distance.toFixed(1)} km`}
-                    </Typography>
-                  </View>
-                )}
-                <Pressable style={{ marginLeft: 'auto' }} onPress={() => setSelectedBusiness(null)}>
-                  <Ionicons name="close" size={20} color={colors.textMuted} />
-                </Pressable>
-              </View>
-
-              <View style={styles.cardContent}>
-                <View style={styles.cardImageWrap}>
-                  {selectedBusiness.imageUrl ? (
-                    <Image
-                      source={{ uri: selectedBusiness.imageUrl }}
-                      style={styles.cardImage}
-                    />
-                  ) : (
-                    <View style={[styles.cardImage, styles.cardImagePlaceholder]}>
-                      <Ionicons name="storefront-outline" size={28} color={colors.textMuted} />
+                  {isActive && (
+                    <View style={styles.chipCount}>
+                      <Typography style={{ color: '#fff', fontSize: 9, fontWeight: 'bold' }}>
+                        {filteredBusinesses.length}
+                      </Typography>
                     </View>
                   )}
-                </View>
-                <View style={styles.cardInfo}>
-                  <Typography variant="h3" numberOfLines={1}>{selectedBusiness.name}</Typography>
-                  <Typography variant="caption" color={colors.primary}>{selectedBusiness.category}</Typography>
-                  {selectedBusiness.description ? (
-                    <Typography variant="body2" numberOfLines={2} color={colors.textMuted}>
-                      {selectedBusiness.description}
-                    </Typography>
-                  ) : null}
-                  <Pressable
-                    style={styles.verPerfilBtn}
-                    onPress={() => router.push(`/negocio/${selectedBusiness.id}`)}
-                  >
-                    <Typography variant="body2" style={{ color: '#fff', fontWeight: 'bold' }}>Ver Tienda</Typography>
-                    <Ionicons name="arrow-forward" size={14} color="#fff" style={{ marginLeft: 4 }} />
-                  </Pressable>
-                </View>
-              </View>
-            </Card>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        )}
+
+        {/* Seed button */}
+        {businesses.length === 0 && !loadingData && (
+          <Pressable style={styles.seedBtn} onPress={handleSeed}>
+            <Ionicons name="cloud-upload-outline" size={16} color="#fff" />
+            <Typography variant="body2" style={{ color: '#fff', marginLeft: spacing.s, fontWeight: '600' }}>
+              Generar datos de prueba
+            </Typography>
+          </Pressable>
+        )}
+
+        {/* Search results count badge */}
+        {(searchQuery || selectedCategory) && !loadingData && (
+          <View style={styles.resultsBadge}>
+            <Ionicons name="storefront-outline" size={13} color={colors.primary} />
+            <Typography variant="caption" color={colors.primary} style={{ marginLeft: 4, fontWeight: '600' }}>
+              {filteredBusinesses.length} resultado{filteredBusinesses.length !== 1 ? 's' : ''}
+            </Typography>
           </View>
         )}
       </View>
+
+      {/* ── BOTTOM OVERLAY: Selected business card ── */}
+      {selectedBusiness && (
+        <View style={styles.bottomSheet} pointerEvents="box-none">
+          <View style={styles.selectedCard}>
+            {/* Handle bar */}
+            <View style={styles.handleBar} />
+
+            {/* Header: status + distance + close */}
+            <View style={styles.cardHeader}>
+              <View style={[styles.openBadge, { backgroundColor: selectedBusiness.isOpen ? '#DCFCE7' : '#F3F4F6' }]}>
+                <View style={[styles.openDot, { backgroundColor: selectedBusiness.isOpen ? '#10B981' : '#6B7280' }]} />
+                <Typography variant="caption" style={{ color: selectedBusiness.isOpen ? '#10B981' : '#6B7280', fontWeight: '700', fontSize: 11 }}>
+                  {selectedBusiness.isOpen ? 'ABIERTO' : 'CERRADO'}
+                </Typography>
+                {selectedBusiness.openingHours && (
+                  <Typography variant="caption" style={{ color: colors.textMuted, marginLeft: 4, fontSize: 10 }}>
+                    · {selectedBusiness.openingHours.open}–{selectedBusiness.openingHours.close}
+                  </Typography>
+                )}
+              </View>
+
+              {selectedBusiness.distance !== undefined && (
+                <View style={styles.distancePill}>
+                  <Ionicons name="location-outline" size={12} color={colors.primary} />
+                  <Typography variant="caption" style={{ marginLeft: 3, color: colors.primary, fontWeight: '600' }}>
+                    {selectedBusiness.distance < 1
+                      ? `${(selectedBusiness.distance * 1000).toFixed(0)} m`
+                      : `${selectedBusiness.distance.toFixed(1)} km`}
+                  </Typography>
+                </View>
+              )}
+
+              <Pressable style={{ marginLeft: 'auto', padding: 4 }} onPress={() => setSelectedBusiness(null)}>
+                <Ionicons name="close" size={20} color={colors.textMuted} />
+              </Pressable>
+            </View>
+
+            {/* Content: image + info + button */}
+            <View style={styles.cardContent}>
+              {/* Cover image */}
+              <View style={styles.cardImageWrap}>
+                {selectedBusiness.imageUrl ? (
+                  <Image source={{ uri: selectedBusiness.imageUrl }} style={styles.cardImage} />
+                ) : (
+                  <View style={[styles.cardImage, styles.cardImagePlaceholder]}>
+                    <Ionicons name="storefront-outline" size={30} color={colors.textMuted} />
+                  </View>
+                )}
+              </View>
+
+              {/* Info */}
+              <View style={styles.cardInfo}>
+                <Typography variant="h3" numberOfLines={1} style={{ marginBottom: 2 }}>
+                  {selectedBusiness.name}
+                </Typography>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 3 }}>
+                  <Ionicons name="pricetag-outline" size={12} color={colors.primary} />
+                  <Typography variant="caption" color={colors.primary} style={{ marginLeft: 3, fontWeight: '600' }}>
+                    {selectedBusiness.category}
+                  </Typography>
+                </View>
+                {selectedBusiness.description ? (
+                  <Typography variant="body2" color={colors.textMuted} numberOfLines={2}>
+                    {selectedBusiness.description}
+                  </Typography>
+                ) : null}
+                {selectedBusiness.address ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3 }}>
+                    <Ionicons name="location-outline" size={11} color={colors.textMuted} />
+                    <Typography variant="caption" color={colors.textMuted} numberOfLines={1} style={{ marginLeft: 3, flex: 1 }}>
+                      {selectedBusiness.address}
+                    </Typography>
+                  </View>
+                ) : null}
+
+                <Pressable
+                  style={styles.viewBtn}
+                  onPress={() => router.push(`/negocio/${selectedBusiness.id}`)}
+                >
+                  <Typography variant="body2" style={{ color: '#fff', fontWeight: 'bold' }}>
+                    Ver Tienda
+                  </Typography>
+                  <Ionicons name="arrow-forward" size={14} color="#fff" style={{ marginLeft: 4 }} />
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Loading indicator */}
+      {loadingData && (
+        <View style={styles.loadingBadge}>
+          <ActivityIndicator size="small" color={colors.primary} />
+          <Typography variant="caption" color={colors.primary} style={{ marginLeft: spacing.s }}>
+            Buscando comercios...
+          </Typography>
+        </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  floatingContainer: {
-    ...StyleSheet.absoluteFill,
-    pointerEvents: 'box-none',
-    justifyContent: 'space-between',
-  },
-  topOverlay: {
-    paddingHorizontal: spacing.l,
+
+  // TOP
+  topContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: spacing.m,
     paddingTop: Platform.OS === 'ios' ? 60 : spacing.xl,
     paddingBottom: spacing.s,
-    pointerEvents: 'box-none',
+  },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.s,
   },
   searchBox: {
     flex: 1,
@@ -485,33 +395,32 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderRadius: radius.round,
     paddingHorizontal: spacing.m,
-    paddingVertical: spacing.s,
-    ...shadows.medium,
+    paddingVertical: Platform.OS === 'ios' ? spacing.s : spacing.xs,
+    ...shadows.floating,
     gap: spacing.s,
   },
   searchInput: {
     flex: 1,
     fontSize: 14,
     color: colors.text,
-    paddingVertical: Platform.OS === 'ios' ? spacing.xs : 0,
+    paddingVertical: 0,
   },
   profileBtn: {
-    marginLeft: spacing.s,
     backgroundColor: colors.surface,
     padding: spacing.s,
     borderRadius: radius.round,
     ...shadows.medium,
     alignItems: 'center',
     justifyContent: 'center',
-    width: 44,
-    height: 44,
+    width: 46,
+    height: 46,
   },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surface,
     paddingHorizontal: spacing.m,
-    paddingVertical: spacing.xs,
+    paddingVertical: 6,
     borderRadius: radius.round,
     marginRight: spacing.s,
     ...shadows.soft,
@@ -531,6 +440,12 @@ const styles = StyleSheet.create({
   chipTextActive: {
     color: '#fff',
   },
+  chipCount: {
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    borderRadius: 8,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
   seedBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -541,111 +456,116 @@ const styles = StyleSheet.create({
     marginTop: spacing.m,
     ...shadows.soft,
   },
-  toggleContainer: {
-    flexDirection: 'row',
-    alignSelf: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: radius.round,
-    padding: 3,
-    ...shadows.medium,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: spacing.m,
-    pointerEvents: 'box-none',
-  },
-  toggleBtn: {
+  resultsBadge: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    alignSelf: 'flex-start',
+    paddingHorizontal: spacing.m,
+    paddingVertical: 5,
+    borderRadius: radius.round,
+    marginTop: spacing.s,
+    ...shadows.soft,
+  },
+  loadingBadge: {
+    position: 'absolute',
+    bottom: 90,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.95)',
     paddingHorizontal: spacing.l,
     paddingVertical: spacing.s,
     borderRadius: radius.round,
-    gap: 6,
+    ...shadows.medium,
   },
-  toggleBtnActive: {
-    backgroundColor: colors.primary,
-  },
-  toggleLabel: {
-    fontWeight: '600',
-    fontSize: 12,
-    color: colors.text,
-  },
-  listOverlay: {
+
+  // BOTTOM SHEET
+  bottomSheet: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 160 : 140,
-    left: 0,
-    right: 0,
-    bottom: 60,
-    backgroundColor: colors.background,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
-    ...shadows.floating,
-    overflow: 'hidden',
-  },
-  emptyList: {
-    alignItems: 'center',
-    paddingVertical: spacing.xxl,
-  },
-  bottomOverlay: {
-    padding: spacing.l,
-    paddingBottom: Platform.OS === 'ios' ? 40 : spacing.xl,
+    bottom: 70,
+    left: spacing.m,
+    right: spacing.m,
   },
   selectedCard: {
     backgroundColor: colors.surface,
-    ...shadows.floating,
+    borderRadius: radius.xl,
     overflow: 'hidden',
+    ...shadows.floating,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  handleBar: {
+    width: 40,
+    height: 4,
+    backgroundColor: colors.border,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: spacing.s,
+    marginBottom: 2,
   },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: spacing.m,
+    paddingHorizontal: spacing.m,
+    paddingVertical: spacing.s,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     gap: spacing.s,
   },
-  cardBadge: {
-    backgroundColor: colors.success + '20',
-    paddingHorizontal: spacing.s,
-    paddingVertical: 2,
-    borderRadius: radius.s,
+  openBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radius.round,
+    gap: 4,
   },
-  distanceBadge: {
+  openDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  distancePill: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.primary + '15',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: radius.s,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radius.round,
   },
   cardContent: {
     flexDirection: 'row',
     padding: spacing.m,
+    gap: spacing.m,
   },
-  cardImageWrap: { borderRadius: radius.m, overflow: 'hidden' },
+  cardImageWrap: {
+    borderRadius: radius.l,
+    overflow: 'hidden',
+  },
   cardImage: {
-    width: 80,
-    height: 80,
-    borderRadius: radius.m,
-    backgroundColor: '#EBEBEB',
+    width: 85,
+    height: 85,
+    borderRadius: radius.l,
   },
   cardImagePlaceholder: {
+    backgroundColor: '#F3F4F6',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F3F4F6',
   },
   cardInfo: {
     flex: 1,
-    marginLeft: spacing.m,
-    justifyContent: 'center',
-    gap: 3,
+    justifyContent: 'flex-start',
   },
-  verPerfilBtn: {
+  viewBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.primary,
     paddingHorizontal: spacing.m,
-    paddingVertical: spacing.xs,
+    paddingVertical: spacing.s,
     borderRadius: radius.m,
     alignSelf: 'flex-start',
     marginTop: spacing.s,
+    ...shadows.soft,
   },
 });

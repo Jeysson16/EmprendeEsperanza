@@ -23,7 +23,8 @@ export interface Business {
   location: Location;
   address: string;
   phone: string;
-  isOpen: boolean;
+  isOpen: boolean;           // computed at runtime from openingHours
+  openingHours?: { open: string; close: string }; // e.g. "09:00" / "18:00"
   imageUrl?: string;
   ownerId?: string;
   products?: Product[];
@@ -49,6 +50,24 @@ export const getCategories = async (): Promise<Category[]> => {
   }
 };
 
+// Determine if business is open based on openingHours and current local time
+export function isBusinessOpen(business: Business): boolean {
+  if (!business.openingHours?.open || !business.openingHours?.close) {
+    return business.isOpen; // fall back to stored value if no hours set
+  }
+  const now = new Date();
+  const [openH, openM] = business.openingHours.open.split(':').map(Number);
+  const [closeH, closeM] = business.openingHours.close.split(':').map(Number);
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const openMinutes = openH * 60 + openM;
+  const closeMinutes = closeH * 60 + closeM;
+  if (closeMinutes <= openMinutes) {
+    // Overnight schedule (e.g. 22:00 - 06:00)
+    return nowMinutes >= openMinutes || nowMinutes < closeMinutes;
+  }
+  return nowMinutes >= openMinutes && nowMinutes < closeMinutes;
+}
+
 // Calcular distancia (Haversine)
 function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371; // Radio de la tierra en km
@@ -65,7 +84,13 @@ function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon
 export const getBusinesses = async (userLat?: number, userLon?: number): Promise<(Business & { distance?: number })[]> => {
   try {
     const snapshot = await getDocs(businessCollection);
-    const businesses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Business));
+    let businesses = snapshot.docs.map(doc => {
+      const data = doc.data() as Business;
+      const b = { id: doc.id, ...data };
+      // Compute isOpen dynamically from openingHours
+      b.isOpen = isBusinessOpen(b);
+      return b;
+    });
     
     if (userLat && userLon) {
       return businesses.map(b => ({
@@ -141,6 +166,7 @@ export const seedInitialData = async (lat: number, lng: number) => {
       address: 'Av. Esperanza 452, Sector 2',
       phone: '+51 987 654 321',
       isOpen: true,
+      openingHours: { open: '07:00', close: '22:00' },
       products: [
         { name: 'Arroz costeño', description: 'Arroz de primera calidad 1kg', price: 4.50 },
         { name: 'Aceite Primor', description: 'Botella de 1 litro', price: 8.50 },
@@ -154,6 +180,7 @@ export const seedInitialData = async (lat: number, lng: number) => {
       address: 'Av. Condorcanqui 120',
       phone: '+51 987 654 322',
       isOpen: true,
+      openingHours: { open: '08:00', close: '20:00' },
       products: []
     },
     {
@@ -164,6 +191,7 @@ export const seedInitialData = async (lat: number, lng: number) => {
       address: 'Calle Los Diamantes 33',
       phone: '+51 987 654 323',
       isOpen: false,
+      openingHours: { open: '11:00', close: '15:00' },
       products: [
         { name: 'Lomo Saltado', description: 'Jugoso lomo con papas fritas', price: 15.00 },
         { name: 'Ceviche', description: 'Pescado fresco del día', price: 20.00 },

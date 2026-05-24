@@ -1,37 +1,77 @@
-import React, { useRef, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import { Business } from '@/core/services/firebaseService';
 import { colors, radius, spacing, shadows } from '@/core/theme';
 import { Typography } from '../Typography';
 import { Ionicons } from '@expo/vector-icons';
 
+export interface MapRegion {
+  latitude: number;
+  longitude: number;
+  bboxOffset?: number; // degrees, default 0.012
+}
+
 interface CustomMapProps {
   businesses: Business[];
   userLocation: { latitude: number; longitude: number } | null;
   onSelectBusiness: (b: Business) => void;
+  region?: MapRegion | null;
 }
 
-// Convert lat/lng offset to approximate pixel position within the iframe viewport
+/**
+ * Convert a lat/lng to pixel coordinates within the current iframe viewport.
+ * Returns null if the point is outside the visible bbox.
+ */
 function latLngToPixel(
   lat: number, lng: number,
   centerLat: number, centerLng: number,
   containerW: number, containerH: number,
-  bboxOffset: number
-): { x: number; y: number } {
-  const x = ((lng - (centerLng - bboxOffset)) / (bboxOffset * 2)) * containerW;
-  const y = (1 - (lat - (centerLat - bboxOffset)) / (bboxOffset * 2)) * containerH;
+  halfLat: number, halfLng: number
+): { x: number; y: number } | null {
+  const minLat = centerLat - halfLat;
+  const maxLat = centerLat + halfLat;
+  const minLng = centerLng - halfLng;
+  const maxLng = centerLng + halfLng;
+
+  if (lat < minLat || lat > maxLat || lng < minLng || lng > maxLng) return null;
+
+  const x = ((lng - minLng) / (maxLng - minLng)) * containerW;
+  const y = (1 - (lat - minLat) / (maxLat - minLat)) * containerH;
   return { x, y };
 }
 
-export const CustomMap: React.FC<CustomMapProps> = ({ businesses, userLocation, onSelectBusiness }) => {
-  const centerLat = userLocation?.latitude || -8.0777;
-  const centerLng = userLocation?.longitude || -79.0354;
+export const CustomMap: React.FC<CustomMapProps> = ({
+  businesses, userLocation, onSelectBusiness, region
+}) => {
   const [mapLoaded, setMapLoaded] = useState(false);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  const [iframeSrc, setIframeSrc] = useState('');
 
-  const bboxOffset = 0.012;
-  const bbox = `${centerLng - bboxOffset},${centerLat - bboxOffset},${centerLng + bboxOffset},${centerLat + bboxOffset}`;
-  const osmUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik`;
+  // Derive center from region prop, or fall back to userLocation / La Esperanza
+  const centerLat = region?.latitude ?? userLocation?.latitude ?? -8.0777;
+  const centerLng = region?.longitude ?? userLocation?.longitude ?? -79.0354;
+
+  // When focusing on specific businesses, use tighter zoom
+  const bboxOffset = region?.bboxOffset ?? 0.012;
+
+  // OSM bbox: west, south, east, north
+  const west  = centerLng - bboxOffset;
+  const south = centerLat - bboxOffset;
+  const east  = centerLng + bboxOffset;
+  const north = centerLat + bboxOffset;
+  const bbox = `${west},${south},${east},${north}`;
+
+  const newSrc = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik`;
+
+  useEffect(() => {
+    // Reset loaded state & update src when center/zoom changes
+    setMapLoaded(false);
+    setIframeSrc(newSrc);
+  }, [centerLat, centerLng, bboxOffset]);
+
+  // half-extents for pixel projection
+  const halfLat = bboxOffset;
+  const halfLng = bboxOffset;
 
   return (
     <View
@@ -42,15 +82,17 @@ export const CustomMap: React.FC<CustomMapProps> = ({ businesses, userLocation, 
       }}
     >
       {/* OpenStreetMap iframe */}
-      <iframe
-        width="100%"
-        height="100%"
-        style={{ border: 0, display: 'block' }}
-        src={osmUrl}
-        onLoad={() => setMapLoaded(true)}
-      />
+      {iframeSrc ? (
+        <iframe
+          width="100%"
+          height="100%"
+          style={{ border: 0, display: 'block' }}
+          src={iframeSrc}
+          onLoad={() => setMapLoaded(true)}
+        />
+      ) : null}
 
-      {/* Loading overlay while OSM iframe loads */}
+      {/* Loading overlay */}
       {!mapLoaded && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color={colors.primary} />
@@ -62,41 +104,50 @@ export const CustomMap: React.FC<CustomMapProps> = ({ businesses, userLocation, 
 
       {/* User location marker */}
       {mapLoaded && containerSize.width > 0 && userLocation && (() => {
-        const { x, y } = latLngToPixel(
+        const pos = latLngToPixel(
           userLocation.latitude, userLocation.longitude,
           centerLat, centerLng,
           containerSize.width, containerSize.height,
-          bboxOffset
+          halfLat, halfLng
         );
-        if (x < 0 || x > containerSize.width || y < 0 || y > containerSize.height) return null;
+        if (!pos) return null;
         return (
-          <View key="user-location" style={[styles.userMarker, { left: x - 14, top: y - 14 }]}>
+          <View key="user-loc" style={[styles.userMarker, { left: pos.x - 14, top: pos.y - 14 }]}>
             <View style={styles.userMarkerPulse} />
             <View style={styles.userMarkerDot} />
           </View>
         );
       })()}
 
-      {/* Business markers over iframe */}
-      {mapLoaded && containerSize.width > 0 && businesses.map((b) => {
-        const { x, y } = latLngToPixel(
+      {/* Business markers */}
+      {mapLoaded && containerSize.width > 0 && businesses.map(b => {
+        const pos = latLngToPixel(
           b.location.latitude, b.location.longitude,
           centerLat, centerLng,
           containerSize.width, containerSize.height,
-          bboxOffset
+          halfLat, halfLng
         );
-        if (x < 0 || x > containerSize.width || y < 0 || y > containerSize.height) return null;
+        if (!pos) return null;
+        const markerColor = b.isOpen ? colors.primary : '#6B7280';
+
         return (
           <Pressable
             key={b.id || b.name}
-            style={[styles.businessMarker, { left: x - 20, top: y - 36 }]}
+            style={({ pressed }) => [
+              styles.businessMarker,
+              { left: pos.x - 20, top: pos.y - 44 },
+              pressed && { opacity: 0.8 }
+            ]}
             onPress={() => onSelectBusiness(b)}
           >
-            <View style={[styles.markerBubble, { backgroundColor: b.isOpen ? colors.primary : colors.textMuted }]}>
-              <Ionicons name="storefront" size={14} color="#fff" />
+            {/* Pin bubble */}
+            <View style={[styles.markerBubble, { backgroundColor: markerColor }]}>
+              <Ionicons name="storefront" size={15} color="#fff" />
             </View>
-            <View style={[styles.markerTail, { borderTopColor: b.isOpen ? colors.primary : colors.textMuted }]} />
-            <View style={[styles.markerLabel]}>
+            {/* Pin tail */}
+            <View style={[styles.markerTail, { borderTopColor: markerColor }]} />
+            {/* Name label */}
+            <View style={styles.markerLabel}>
               <Typography variant="caption" style={styles.markerLabelText} numberOfLines={1}>
                 {b.name}
               </Typography>
@@ -109,14 +160,21 @@ export const CustomMap: React.FC<CustomMapProps> = ({ businesses, userLocation, 
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, width: '100%', height: '100%', position: 'relative', overflow: 'hidden' },
+  container: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+    position: 'relative',
+    overflow: 'hidden',
+  },
   loadingOverlay: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(255,255,255,0.85)',
+    backgroundColor: 'rgba(255,255,255,0.9)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10,
   },
+  // User location blue dot with pulse ring
   userMarker: {
     position: 'absolute',
     width: 28,
@@ -124,46 +182,48 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 20,
-  },
+    pointerEvents: 'none',
+  } as any,
   userMarkerPulse: {
     position: 'absolute',
     width: 28,
     height: 28,
     borderRadius: 14,
     backgroundColor: colors.primary + '30',
-    borderWidth: 1,
-    borderColor: colors.primary + '60',
+    borderWidth: 1.5,
+    borderColor: colors.primary + '70',
   },
   userMarkerDot: {
-    width: 14,
-    height: 14,
+    width: 13,
+    height: 13,
     borderRadius: 7,
     backgroundColor: colors.primary,
     borderWidth: 2.5,
     borderColor: '#fff',
     ...shadows.soft,
   },
+  // Business map pin
   businessMarker: {
     position: 'absolute',
     alignItems: 'center',
     zIndex: 15,
   },
   markerBubble: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
-    ...shadows.medium,
-    borderWidth: 2,
+    borderWidth: 2.5,
     borderColor: '#fff',
+    ...shadows.medium,
   },
   markerTail: {
     width: 0,
     height: 0,
     borderLeftWidth: 6,
     borderRightWidth: 6,
-    borderTopWidth: 8,
+    borderTopWidth: 9,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
     marginTop: -1,
@@ -172,9 +232,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.95)',
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 4,
-    marginTop: 2,
-    maxWidth: 120,
+    borderRadius: 5,
+    marginTop: 3,
+    maxWidth: 130,
     ...shadows.soft,
   },
   markerLabelText: {

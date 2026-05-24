@@ -8,6 +8,7 @@ import {
   getBusinessByOwnerId,
   getCategories,
   getOrdersByBusinessId,
+  isBusinessOpen,
   Order,
   Product,
   updateBusiness,
@@ -22,6 +23,7 @@ import { Input } from '@/shared/components/Input';
 import { Typography } from '@/shared/components/Typography';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -45,7 +47,14 @@ export default function MaintainerDashboard() {
   const [description, setDescription] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
-  const [isOpen, setIsOpen] = useState(true);
+
+  // Horario de atención
+  const [openHour, setOpenHour] = useState('08:00');
+  const [closeHour, setCloseHour] = useState('20:00');
+
+  // Coordenadas del local
+  const [locLat, setLocLat] = useState('');
+  const [locLng, setLocLng] = useState('');
 
   // Pedidos del negocio
   const [orders, setOrders] = useState<Order[]>([]);
@@ -97,7 +106,10 @@ export default function MaintainerDashboard() {
         setPhone(b.phone || '');
         setDescription(b.description || '');
         setImageUrl(b.imageUrl || '');
-        setIsOpen(b.isOpen !== undefined ? b.isOpen : true);
+        setOpenHour(b.openingHours?.open || '08:00');
+        setCloseHour(b.openingHours?.close || '20:00');
+        setLocLat(b.location?.latitude?.toString() || '');
+        setLocLng(b.location?.longitude?.toString() || '');
         
         const matchedCat = cats.find(c => c.name === b.category);
         if (matchedCat) {
@@ -159,6 +171,20 @@ export default function MaintainerDashboard() {
       return;
     }
 
+    const lat = parseFloat(locLat);
+    const lng = parseFloat(locLng);
+    if (isNaN(lat) || isNaN(lng)) {
+      Alert.alert('Coordenadas inválidas', 'Por favor ingresa coordenadas válidas o usa el botón de ubicación actual.');
+      return;
+    }
+
+    // Validate opening hours format HH:MM
+    const timeRegex = /^([01]\d|2[0-3]):[0-5]\d$/;
+    if (!timeRegex.test(openHour) || !timeRegex.test(closeHour)) {
+      Alert.alert('Formato de hora inválido', 'Ingresa las horas en formato HH:MM, por ejemplo 08:00 o 21:30');
+      return;
+    }
+
     setSaving(true);
     try {
       const businessData: Omit<Business, 'id'> = {
@@ -168,11 +194,14 @@ export default function MaintainerDashboard() {
         phone,
         description,
         imageUrl: imageUrl || 'https://images.unsplash.com/photo-1473169643883-f8ed53bc87e9?auto=format&fit=crop&q=80&w=600',
-        isOpen,
+        isOpen: false, // will be computed dynamically
+        openingHours: { open: openHour, close: closeHour },
         ownerId: user.uid,
-        location: business?.location || { latitude: -8.0805, longitude: -79.0354 }, // Coordenadas default Trujillo
+        location: { latitude: lat, longitude: lng },
         products: business?.products || []
       };
+      // Compute live isOpen
+      businessData.isOpen = isBusinessOpen(businessData as Business);
 
       if (business?.id) {
         await updateBusiness(business.id, businessData);
@@ -494,28 +523,118 @@ export default function MaintainerDashboard() {
                 editable={!saving}
               />
 
-              {/* Estado del Local (Abierto / Cerrado) */}
-              <Typography variant="body2" style={{ marginBottom: spacing.xs, fontWeight: 'bold' }}>Estado del Local</Typography>
-              <View style={styles.toggleRow}>
-                <Pressable 
-                  style={[styles.toggleBtn, isOpen && styles.toggleActiveOpen]}
-                  onPress={() => setIsOpen(true)}
+              {/* ── Horario de Atención ── */}
+              <Typography variant="body2" style={{ marginBottom: spacing.xs, fontWeight: 'bold', marginTop: spacing.s }}>
+                Horario de Atención *
+              </Typography>
+              <View style={styles.hoursRow}>
+                <View style={{ flex: 1 }}>
+                  <Input
+                    label="Apertura (HH:MM)"
+                    placeholder="08:00"
+                    style={styles.input}
+                    value={openHour}
+                    onChangeText={setOpenHour}
+                    keyboardType="numbers-and-punctuation"
+                    editable={!saving}
+                  />
+                </View>
+                <Ionicons name="arrow-forward" size={18} color={colors.textMuted} style={{ marginHorizontal: spacing.s, marginTop: 36 }} />
+                <View style={{ flex: 1 }}>
+                  <Input
+                    label="Cierre (HH:MM)"
+                    placeholder="20:00"
+                    style={styles.input}
+                    value={closeHour}
+                    onChangeText={setCloseHour}
+                    keyboardType="numbers-and-punctuation"
+                    editable={!saving}
+                  />
+                </View>
+              </View>
+              <View style={styles.hoursPreview}>
+                <Ionicons name="time-outline" size={14} color={colors.primary} />
+                <Typography variant="caption" color={colors.primary} style={{ marginLeft: 4 }}>
+                  Estado actual basado en el horario:{' '}
+                  {(() => {
+                    if (!openHour || !closeHour) return 'Sin horario';
+                    const now = new Date();
+                    const [oh, om] = openHour.split(':').map(Number);
+                    const [ch, cm] = closeHour.split(':').map(Number);
+                    const nowM = now.getHours() * 60 + now.getMinutes();
+                    const openM = oh * 60 + om;
+                    const closeM = ch * 60 + cm;
+                    const open = closeM <= openM
+                      ? (nowM >= openM || nowM < closeM)
+                      : (nowM >= openM && nowM < closeM);
+                    return open ? '🟢 Abierto ahora' : '🔴 Cerrado ahora';
+                  })()}
+                </Typography>
+              </View>
+
+              {/* ── Ubicación del Local ── */}
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.m, marginBottom: spacing.xs }}>
+                <Typography variant="body2" style={{ fontWeight: 'bold' }}>
+                  Ubicación en el Mapa *
+                </Typography>
+                <Pressable
+                  style={styles.gpsBtn}
                   disabled={saving}
+                  onPress={async () => {
+                    try {
+                      const { status } = await Location.requestForegroundPermissionsAsync();
+                      if (status !== 'granted') {
+                        Alert.alert('Permiso denegado', 'Activa los permisos de ubicación para usar esta función.');
+                        return;
+                      }
+                      const loc = await Location.getCurrentPositionAsync({});
+                      setLocLat(loc.coords.latitude.toFixed(6));
+                      setLocLng(loc.coords.longitude.toFixed(6));
+                      Alert.alert('Ubicación obtenida', `Lat: ${loc.coords.latitude.toFixed(5)}\nLng: ${loc.coords.longitude.toFixed(5)}`);
+                    } catch {
+                      Alert.alert('Error', 'No se pudo obtener la ubicación.');
+                    }
+                  }}
                 >
-                  <Typography variant="body2" style={isOpen ? { color: '#fff', fontWeight: 'bold' } : { color: colors.textMuted }}>
-                    Abierto
-                  </Typography>
-                </Pressable>
-                <Pressable 
-                  style={[styles.toggleBtn, !isOpen && styles.toggleActiveClosed]}
-                  onPress={() => setIsOpen(false)}
-                  disabled={saving}
-                >
-                  <Typography variant="body2" style={!isOpen ? { color: '#fff', fontWeight: 'bold' } : { color: colors.textMuted }}>
-                    Cerrado
+                  <Ionicons name="locate" size={14} color="#fff" />
+                  <Typography variant="caption" style={{ color: '#fff', marginLeft: 4, fontWeight: '600' }}>
+                    Usar mi ubicación
                   </Typography>
                 </Pressable>
               </View>
+              <View style={styles.coordsRow}>
+                <View style={{ flex: 1 }}>
+                  <Input
+                    label="Latitud"
+                    placeholder="-8.077700"
+                    style={styles.input}
+                    value={locLat}
+                    onChangeText={setLocLat}
+                    keyboardType="numbers-and-punctuation"
+                    editable={!saving}
+                  />
+                </View>
+                <View style={{ width: spacing.m }} />
+                <View style={{ flex: 1 }}>
+                  <Input
+                    label="Longitud"
+                    placeholder="-79.035400"
+                    style={styles.input}
+                    value={locLng}
+                    onChangeText={setLocLng}
+                    keyboardType="numbers-and-punctuation"
+                    editable={!saving}
+                  />
+                </View>
+              </View>
+              {(locLat && locLng) && (
+                <View style={styles.coordPreview}>
+                  <Ionicons name="location" size={14} color={colors.primary} />
+                  <Typography variant="caption" color={colors.primary} style={{ marginLeft: 4 }}>
+                    Coordenadas: {parseFloat(locLat).toFixed(5)}, {parseFloat(locLng).toFixed(5)}
+                  </Typography>
+                </View>
+              )}
               
               {saving ? (
                 <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: spacing.m }} />
@@ -941,6 +1060,40 @@ const styles = StyleSheet.create({
   toggleActiveClosed: {
     backgroundColor: colors.error,
     ...shadows.soft,
+  },
+  hoursRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: spacing.xs,
+  },
+  hoursPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary + '12',
+    padding: spacing.s,
+    borderRadius: radius.s,
+    marginBottom: spacing.m,
+  },
+  gpsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.m,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.round,
+  },
+  coordsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  coordPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary + '12',
+    padding: spacing.s,
+    borderRadius: radius.s,
+    marginBottom: spacing.m,
+    marginTop: -spacing.s,
   },
   productRow: {
     flexDirection: 'row',

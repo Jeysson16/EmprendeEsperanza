@@ -4,6 +4,7 @@ import {
   signInWithPopup, 
   GoogleAuthProvider, 
   signOut, 
+  updateProfile,
   User as FirebaseUser 
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
@@ -147,6 +148,21 @@ export const logout = async () => {
     await signOut(auth);
   } catch (error) {
     console.error('Error al cerrar sesión:', error);
+    throw error;
+  }
+};
+
+// Actualizar el perfil del usuario en Firestore y Firebase Auth
+export const updateUserProfile = async (uid: string, displayName: string): Promise<void> => {
+  try {
+    const docRef = doc(db, 'users', uid);
+    await setDoc(docRef, { displayName }, { merge: true });
+    
+    if (auth.currentUser && auth.currentUser.uid === uid) {
+      await updateProfile(auth.currentUser, { displayName });
+    }
+  } catch (error) {
+    console.error('Error al actualizar el perfil en authService:', error);
     throw error;
   }
 };
